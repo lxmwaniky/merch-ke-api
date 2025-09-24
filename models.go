@@ -138,11 +138,11 @@ func createProduct(req *CreateProductRequest) (*Product, error) {
 	`
 
 	var product Product
-	err := db.QueryRow(query, 
-		req.Name, req.Slug, req.Description, req.ShortDescription, 
+	err := db.QueryRow(query,
+		req.Name, req.Slug, req.Description, req.ShortDescription,
 		req.CategoryID, req.BasePrice, req.SKUPrefix, req.IsFeatured,
 		req.Weight, req.Dimensions,
-	).Scan(&product.ID, &product.Name, &product.Slug, &product.Description, 
+	).Scan(&product.ID, &product.Name, &product.Slug, &product.Description,
 		&product.CategoryID, &product.BasePrice, &product.IsActive, &product.IsFeatured)
 
 	if err != nil {
@@ -234,7 +234,7 @@ func updateProduct(id int, req *UpdateProductRequest) (*Product, error) {
 // Soft delete product (admin only)
 func deleteProduct(id int) error {
 	query := `UPDATE products SET is_active = false, updated_at = NOW() WHERE id = $1`
-	
+
 	result, err := db.Exec(query, id)
 	if err != nil {
 		return err

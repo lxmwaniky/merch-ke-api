@@ -32,6 +32,13 @@ func main() {
 	// Protected routes (require authentication)
 	app.Get("/api/auth/profile", authMiddleware, profileHandler)
 
+	// Admin routes (require admin privileges)
+	admin := app.Group("/api/admin", authMiddleware, adminMiddleware)
+	admin.Post("/products", adminCreateProductHandler)
+	admin.Put("/products/:id", adminUpdateProductHandler)
+	admin.Delete("/products/:id", adminDeleteProductHandler)
+	admin.Get("/products", adminGetProductsHandler)
+
 	log.Println("🚀 Swags Store API starting on http://161.35.104.94:8080")
 	log.Fatal(app.Listen("0.0.0.0:8080"))
 }

@@ -2,6 +2,7 @@ package main
 
 import (
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/gofiber/fiber/v2"
@@ -194,4 +195,160 @@ func getJWTSecret() string {
 		secret = "your-secret-key" // Default for development
 	}
 	return secret
+}
+
+// Admin: Create new product
+func adminCreateProductHandler(c *fiber.Ctx) error {
+	var req CreateProductRequest
+	
+	// Parse request body
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(400).JSON(fiber.Map{
+			"error": "Invalid request body",
+		})
+	}
+
+	// Basic validation
+	if req.Name == "" || req.Slug == "" || req.CategoryID <= 0 || req.BasePrice <= 0 {
+		return c.Status(400).JSON(fiber.Map{
+			"error": "Name, slug, category_id, and base_price are required",
+		})
+	}
+
+	// Create product
+	product, err := createProduct(&req)
+	if err != nil {
+		// Check for duplicate slug
+		if strings.Contains(err.Error(), "duplicate key") {
+			return c.Status(409).JSON(fiber.Map{
+				"error": "Product with this slug already exists",
+			})
+		}
+		return c.Status(500).JSON(fiber.Map{
+			"error": "Failed to create product",
+			"details": err.Error(),
+		})
+	}
+
+	return c.Status(201).JSON(fiber.Map{
+		"message": "Product created successfully",
+		"product": product,
+	})
+}
+
+// Admin: Update existing product
+func adminUpdateProductHandler(c *fiber.Ctx) error {
+	// Get product ID from URL
+	idStr := c.Params("id")
+	id, err := strconv.Atoi(idStr)
+	if err != nil {
+		return c.Status(400).JSON(fiber.Map{
+			"error": "Invalid product ID",
+		})
+	}
+
+	var req UpdateProductRequest
+	
+	// Parse request body
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(400).JSON(fiber.Map{
+			"error": "Invalid request body",
+		})
+	}
+
+	// Update product
+	product, err := updateProduct(id, &req)
+	if err != nil {
+		if err.Error() == "no fields to update" {
+			return c.Status(400).JSON(fiber.Map{
+				"error": "No fields provided for update",
+			})
+		}
+		if strings.Contains(err.Error(), "duplicate key") {
+			return c.Status(409).JSON(fiber.Map{
+				"error": "Product with this slug already exists",
+			})
+		}
+		if err.Error() == "sql: no rows in result set" {
+			return c.Status(404).JSON(fiber.Map{
+				"error": "Product not found",
+			})
+		}
+		return c.Status(500).JSON(fiber.Map{
+			"error": "Failed to update product",
+			"details": err.Error(),
+		})
+	}
+
+	return c.JSON(fiber.Map{
+		"message": "Product updated successfully",
+		"product": product,
+	})
+}
+
+// Admin: Delete product (soft delete)
+func adminDeleteProductHandler(c *fiber.Ctx) error {
+	// Get product ID from URL
+	idStr := c.Params("id")
+	id, err := strconv.Atoi(idStr)
+	if err != nil {
+		return c.Status(400).JSON(fiber.Map{
+			"error": "Invalid product ID",
+		})
+	}
+
+	// Delete product (soft delete)
+	err = deleteProduct(id)
+	if err != nil {
+		if err.Error() == "product not found" {
+			return c.Status(404).JSON(fiber.Map{
+				"error": "Product not found",
+			})
+		}
+		return c.Status(500).JSON(fiber.Map{
+			"error": "Failed to delete product",
+			"details": err.Error(),
+		})
+	}
+
+	return c.JSON(fiber.Map{
+		"message": "Product deleted successfully",
+	})
+}
+
+// Admin: Get all products (including inactive)
+func adminGetProductsHandler(c *fiber.Ctx) error {
+	query := `
+		SELECT id, name, slug, description, category_id, base_price, is_active, is_featured 
+		FROM products 
+		ORDER BY created_at DESC
+	`
+	
+	rows, err := db.Query(query)
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{
+			"error": "Failed to fetch products",
+			"details": err.Error(),
+		})
+	}
+	defer rows.Close()
+	
+	var products []Product
+	for rows.Next() {
+		var p Product
+		err := rows.Scan(&p.ID, &p.Name, &p.Slug, &p.Description, &p.CategoryID, &p.BasePrice, &p.IsActive, &p.IsFeatured)
+		if err != nil {
+			return c.Status(500).JSON(fiber.Map{
+				"error": "Failed to scan products",
+				"details": err.Error(),
+			})
+		}
+		products = append(products, p)
+	}
+
+	return c.JSON(fiber.Map{
+		"products": products,
+		"total":    len(products),
+		"message": "All products (including inactive)",
+	})
 }
