@@ -200,7 +200,7 @@ func getJWTSecret() string {
 // Admin: Create new product
 func adminCreateProductHandler(c *fiber.Ctx) error {
 	var req CreateProductRequest
-	
+
 	// Parse request body
 	if err := c.BodyParser(&req); err != nil {
 		return c.Status(400).JSON(fiber.Map{
@@ -225,7 +225,7 @@ func adminCreateProductHandler(c *fiber.Ctx) error {
 			})
 		}
 		return c.Status(500).JSON(fiber.Map{
-			"error": "Failed to create product",
+			"error":   "Failed to create product",
 			"details": err.Error(),
 		})
 	}
@@ -248,7 +248,7 @@ func adminUpdateProductHandler(c *fiber.Ctx) error {
 	}
 
 	var req UpdateProductRequest
-	
+
 	// Parse request body
 	if err := c.BodyParser(&req); err != nil {
 		return c.Status(400).JSON(fiber.Map{
@@ -275,7 +275,7 @@ func adminUpdateProductHandler(c *fiber.Ctx) error {
 			})
 		}
 		return c.Status(500).JSON(fiber.Map{
-			"error": "Failed to update product",
+			"error":   "Failed to update product",
 			"details": err.Error(),
 		})
 	}
@@ -306,7 +306,7 @@ func adminDeleteProductHandler(c *fiber.Ctx) error {
 			})
 		}
 		return c.Status(500).JSON(fiber.Map{
-			"error": "Failed to delete product",
+			"error":   "Failed to delete product",
 			"details": err.Error(),
 		})
 	}
@@ -323,23 +323,23 @@ func adminGetProductsHandler(c *fiber.Ctx) error {
 		FROM products 
 		ORDER BY created_at DESC
 	`
-	
+
 	rows, err := db.Query(query)
 	if err != nil {
 		return c.Status(500).JSON(fiber.Map{
-			"error": "Failed to fetch products",
+			"error":   "Failed to fetch products",
 			"details": err.Error(),
 		})
 	}
 	defer rows.Close()
-	
+
 	var products []Product
 	for rows.Next() {
 		var p Product
 		err := rows.Scan(&p.ID, &p.Name, &p.Slug, &p.Description, &p.CategoryID, &p.BasePrice, &p.IsActive, &p.IsFeatured)
 		if err != nil {
 			return c.Status(500).JSON(fiber.Map{
-				"error": "Failed to scan products",
+				"error":   "Failed to scan products",
 				"details": err.Error(),
 			})
 		}
@@ -349,6 +349,6 @@ func adminGetProductsHandler(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{
 		"products": products,
 		"total":    len(products),
-		"message": "All products (including inactive)",
+		"message":  "All products (including inactive)",
 	})
 }
