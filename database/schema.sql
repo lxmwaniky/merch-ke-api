@@ -1,4 +1,4 @@
--- Swags Store Ke - Complete Database Schema
+-- Merch Ke - Complete Database Schema
 -- Run these commands in your PostgreSQL terminal
 
 -- =====================================================

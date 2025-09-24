@@ -1,6 +1,5 @@
-# Swags Store Ke - Backend API
+# Merch Ke - Backend API
 
-A modern ecommerce backend for selling tech swags and merchandise.
 
 ## Features
 

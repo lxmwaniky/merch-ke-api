@@ -79,7 +79,7 @@ func generateJWT(user *User) (string, error) {
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(24 * time.Hour)),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
-			Issuer:    "swags-store-api",
+			Issuer:    "merch-ke-api",
 		},
 	}
 

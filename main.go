@@ -14,7 +14,7 @@ func main() {
 	defer closeDatabase()
 
 	app := fiber.New(fiber.Config{
-		AppName: "Swags Store API",
+		AppName: "Merch Ke API",
 	})
 
 	app.Use(cors.New())
@@ -51,14 +51,14 @@ func main() {
 	admin.Delete("/products/:id", adminDeleteProductHandler)
 	admin.Get("/products", adminGetProductsHandler)
 
-	log.Println("🚀 Swags Store API starting on http://161.35.104.94:8080")
+	log.Println("🚀 Merch Ke API starting on http://161.35.104.94:8080")
 	log.Fatal(app.Listen("0.0.0.0:8080"))
 }
 
 func healthHandler(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{
 		"status":  "healthy",
-		"service": "Swags Store API",
+		"service": "Merch Ke API",
 	})
 }
 

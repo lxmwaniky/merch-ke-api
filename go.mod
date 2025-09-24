@@ -1,4 +1,4 @@
-module github.com/lxmwaniky/swag-store-api
+module github.com/lxmwaniky/merch-ke-api
 
 go 1.24.6
 
