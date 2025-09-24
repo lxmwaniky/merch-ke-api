@@ -9,7 +9,7 @@
 
 ## 🎯 Project Overview
 
-An e-commerce web application for selling tech swag items with a focus on the Kenyan market. The platform will feature a modern user interface, comprehensive admin panel, and integrated payment solutions including M-Pesa.
+An e-commerce web application for selling tech swag items with a focus on the Kenyan market. The platform will feature a modern user interface and integrated payment solutions including M-Pesa.
 
 ---
 
