@@ -188,6 +188,50 @@ func adminMiddleware(c *fiber.Ctx) error {
 	return c.Next()
 }
 
+// Optional auth middleware (allows both authenticated and guest users)
+func optionalAuthMiddleware(c *fiber.Ctx) error {
+	// Get token from Authorization header
+	authHeader := c.Get("Authorization")
+	if authHeader == "" {
+		// No token provided - proceed as guest user
+		return c.Next()
+	}
+
+	// Extract token (Bearer <token>)
+	tokenString := strings.Replace(authHeader, "Bearer ", "", 1)
+	if tokenString == authHeader {
+		// Invalid format - proceed as guest user
+		return c.Next()
+	}
+
+	// Parse and validate token
+	secret := getJWTSecret()
+	token, err := jwt.ParseWithClaims(tokenString, &Claims{}, func(token *jwt.Token) (interface{}, error) {
+		return []byte(secret), nil
+	})
+
+	if err != nil || !token.Valid {
+		// Invalid token - proceed as guest user
+		return c.Next()
+	}
+
+	// Extract claims
+	claims, ok := token.Claims.(*Claims)
+	if !ok {
+		// Invalid claims - proceed as guest user
+		return c.Next()
+	}
+
+	// Store user info in context (user is authenticated)
+	c.Locals("user", claims)
+	c.Locals("userID", claims.UserID)
+	c.Locals("username", claims.Username)
+	c.Locals("email", claims.Email)
+	c.Locals("role", claims.Role)
+
+	return c.Next()
+}
+
 // Helper function to get JWT secret
 func getJWTSecret() string {
 	secret := os.Getenv("JWT_SECRET")
@@ -350,5 +394,273 @@ func adminGetProductsHandler(c *fiber.Ctx) error {
 		"products": products,
 		"total":    len(products),
 		"message":  "All products (including inactive)",
+	})
+}
+
+// =====================================================
+// CART HANDLERS
+// =====================================================
+
+// Add item to cart (works for both authenticated and guest users)
+func addToCartHandler(c *fiber.Ctx) error {
+	var req AddToCartRequest
+
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(400).JSON(fiber.Map{
+			"error": "Invalid request body",
+		})
+	}
+
+	// Validation
+	if req.ProductID <= 0 {
+		return c.Status(400).JSON(fiber.Map{
+			"error": "Valid product_id is required",
+		})
+	}
+
+	if req.Quantity <= 0 {
+		req.Quantity = 1 // Default to 1
+	}
+
+	// Check if user is authenticated
+	user := c.Locals("user")
+
+	if user != nil {
+		// Authenticated user - use user cart
+		userClaims := user.(*jwt.MapClaims)
+		userID := int((*userClaims)["user_id"].(float64))
+
+		err := addToUserCart(userID, req.ProductID, req.Quantity)
+		if err != nil {
+			return c.Status(500).JSON(fiber.Map{
+				"error":   "Failed to add item to cart",
+				"details": err.Error(),
+			})
+		}
+
+		return c.JSON(fiber.Map{
+			"message": "Item added to cart successfully",
+		})
+	} else {
+		// Guest user - use session cart
+		sessionID := c.Get("X-Session-ID", "")
+		if sessionID == "" {
+			return c.Status(400).JSON(fiber.Map{
+				"error": "Session ID required for guest users (send X-Session-ID header)",
+			})
+		}
+
+		err := addToGuestCart(sessionID, req.ProductID, req.Quantity)
+		if err != nil {
+			return c.Status(500).JSON(fiber.Map{
+				"error":   "Failed to add item to cart",
+				"details": err.Error(),
+			})
+		}
+
+		return c.JSON(fiber.Map{
+			"message": "Item added to cart successfully",
+		})
+	}
+}
+
+// Get cart items and summary
+func getCartHandler(c *fiber.Ctx) error {
+	user := c.Locals("user")
+
+	if user != nil {
+		// Authenticated user
+		userClaims := user.(*jwt.MapClaims)
+		userID := int((*userClaims)["user_id"].(float64))
+
+		summary, err := getCartSummary(&userID, nil)
+		if err != nil {
+			return c.Status(500).JSON(fiber.Map{
+				"error":   "Failed to get cart",
+				"details": err.Error(),
+			})
+		}
+
+		return c.JSON(summary)
+	} else {
+		// Guest user
+		sessionID := c.Get("X-Session-ID", "")
+		if sessionID == "" {
+			return c.Status(400).JSON(fiber.Map{
+				"error": "Session ID required for guest users (send X-Session-ID header)",
+			})
+		}
+
+		summary, err := getCartSummary(nil, &sessionID)
+		if err != nil {
+			return c.Status(500).JSON(fiber.Map{
+				"error":   "Failed to get cart",
+				"details": err.Error(),
+			})
+		}
+
+		return c.JSON(summary)
+	}
+}
+
+// Update cart item quantity
+func updateCartHandler(c *fiber.Ctx) error {
+	productID, err := strconv.Atoi(c.Params("productId"))
+	if err != nil {
+		return c.Status(400).JSON(fiber.Map{
+			"error": "Invalid product ID",
+		})
+	}
+
+	var req struct {
+		Quantity int `json:"quantity"`
+	}
+
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(400).JSON(fiber.Map{
+			"error": "Invalid request body",
+		})
+	}
+
+	user := c.Locals("user")
+
+	if user != nil {
+		// Authenticated user
+		userClaims := user.(*jwt.MapClaims)
+		userID := int((*userClaims)["user_id"].(float64))
+
+		err := updateCartItemQuantity(&userID, nil, productID, req.Quantity)
+		if err != nil {
+			return c.Status(500).JSON(fiber.Map{
+				"error":   "Failed to update cart item",
+				"details": err.Error(),
+			})
+		}
+	} else {
+		// Guest user
+		sessionID := c.Get("X-Session-ID", "")
+		if sessionID == "" {
+			return c.Status(400).JSON(fiber.Map{
+				"error": "Session ID required for guest users",
+			})
+		}
+
+		err := updateCartItemQuantity(nil, &sessionID, productID, req.Quantity)
+		if err != nil {
+			return c.Status(500).JSON(fiber.Map{
+				"error":   "Failed to update cart item",
+				"details": err.Error(),
+			})
+		}
+	}
+
+	message := "Cart item updated successfully"
+	if req.Quantity <= 0 {
+		message = "Item removed from cart"
+	}
+
+	return c.JSON(fiber.Map{
+		"message": message,
+	})
+}
+
+// Remove item from cart
+func removeFromCartHandler(c *fiber.Ctx) error {
+	productID, err := strconv.Atoi(c.Params("productId"))
+	if err != nil {
+		return c.Status(400).JSON(fiber.Map{
+			"error": "Invalid product ID",
+		})
+	}
+
+	user := c.Locals("user")
+
+	if user != nil {
+		// Authenticated user
+		userClaims := user.(*jwt.MapClaims)
+		userID := int((*userClaims)["user_id"].(float64))
+
+		err := removeFromCart(&userID, nil, productID)
+		if err != nil {
+			return c.Status(500).JSON(fiber.Map{
+				"error":   "Failed to remove item from cart",
+				"details": err.Error(),
+			})
+		}
+	} else {
+		// Guest user
+		sessionID := c.Get("X-Session-ID", "")
+		if sessionID == "" {
+			return c.Status(400).JSON(fiber.Map{
+				"error": "Session ID required for guest users",
+			})
+		}
+
+		err := removeFromCart(nil, &sessionID, productID)
+		if err != nil {
+			return c.Status(500).JSON(fiber.Map{
+				"error":   "Failed to remove item from cart",
+				"details": err.Error(),
+			})
+		}
+	}
+
+	return c.JSON(fiber.Map{
+		"message": "Item removed from cart successfully",
+	})
+}
+
+// Get user points (authenticated users only)
+func getUserPointsHandler(c *fiber.Ctx) error {
+	user := c.Locals("user")
+	if user == nil {
+		return c.Status(401).JSON(fiber.Map{
+			"error": "Authentication required",
+		})
+	}
+
+	userClaims := user.(*jwt.MapClaims)
+	userID := int((*userClaims)["user_id"].(float64))
+
+	points, err := getUserPoints(userID)
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{
+			"error":   "Failed to get user points",
+			"details": err.Error(),
+		})
+	}
+
+	return c.JSON(points)
+}
+
+// Migrate guest cart to user cart (called during login/register)
+func migrateCartHandler(c *fiber.Ctx) error {
+	user := c.Locals("user")
+	if user == nil {
+		return c.Status(401).JSON(fiber.Map{
+			"error": "Authentication required",
+		})
+	}
+
+	sessionID := c.Get("X-Session-ID", "")
+	if sessionID == "" {
+		return c.JSON(fiber.Map{
+			"message": "No guest cart to migrate",
+		})
+	}
+
+	userClaims := user.(*jwt.MapClaims)
+	userID := int((*userClaims)["user_id"].(float64))
+
+	err := migrateGuestCartToUser(sessionID, userID)
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{
+			"error":   "Failed to migrate cart",
+			"details": err.Error(),
+		})
+	}
+
+	return c.JSON(fiber.Map{
+		"message": "Guest cart migrated successfully",
 	})
 }

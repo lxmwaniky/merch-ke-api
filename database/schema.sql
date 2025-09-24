@@ -117,7 +117,7 @@ CREATE TABLE user_addresses (
 );
 
 -- =====================================================
--- 7. SHOPPING CART
+-- 7. SHOPPING CART (User Cart)
 -- =====================================================
 CREATE TABLE cart_items (
     id SERIAL PRIMARY KEY,
@@ -127,6 +127,45 @@ CREATE TABLE cart_items (
     created_at TIMESTAMP DEFAULT NOW(),
     updated_at TIMESTAMP DEFAULT NOW(),
     UNIQUE(user_id, variant_id)
+);
+
+-- =====================================================
+-- 7B. GUEST CART (Session-based)
+-- =====================================================
+CREATE TABLE guest_cart_items (
+    id SERIAL PRIMARY KEY,
+    session_id VARCHAR(255) NOT NULL, -- Session identifier for guest users
+    variant_id INTEGER REFERENCES product_variants(id) ON DELETE CASCADE,
+    quantity INTEGER NOT NULL DEFAULT 1,
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW(),
+    UNIQUE(session_id, variant_id)
+);
+
+-- =====================================================
+-- 7C. USER POINTS SYSTEM
+-- =====================================================
+CREATE TABLE user_points (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+    points_balance INTEGER DEFAULT 0,
+    total_earned INTEGER DEFAULT 0,
+    total_spent INTEGER DEFAULT 0,
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW()
+);
+
+-- =====================================================
+-- 7D. POINTS TRANSACTIONS
+-- =====================================================
+CREATE TABLE points_transactions (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+    order_id INTEGER REFERENCES orders(id),
+    transaction_type VARCHAR(20) NOT NULL, -- 'earned', 'spent', 'expired'
+    points INTEGER NOT NULL,
+    description TEXT,
+    created_at TIMESTAMP DEFAULT NOW()
 );
 
 -- =====================================================

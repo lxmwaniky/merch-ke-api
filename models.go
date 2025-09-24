@@ -251,3 +251,312 @@ func deleteProduct(id int) error {
 
 	return nil
 }
+
+// =====================================================
+// CART MODELS AND FUNCTIONS
+// =====================================================
+
+// CartItem represents a cart item
+type CartItem struct {
+	ID        int     `json:"id"`
+	UserID    *int    `json:"user_id,omitempty"`
+	SessionID *string `json:"session_id,omitempty"`
+	ProductID int     `json:"product_id"`
+	Quantity  int     `json:"quantity"`
+	// Joined fields from product
+	ProductName string  `json:"product_name"`
+	ProductSlug string  `json:"product_slug"`
+	Price       float64 `json:"price"`
+	ImageURL    *string `json:"image_url,omitempty"`
+}
+
+// CartSummary represents cart totals
+type CartSummary struct {
+	Items      []CartItem `json:"items"`
+	TotalItems int        `json:"total_items"`
+	Subtotal   float64    `json:"subtotal"`
+}
+
+// AddToCartRequest represents add to cart request
+type AddToCartRequest struct {
+	ProductID int `json:"product_id"`
+	Quantity  int `json:"quantity"`
+}
+
+// UserPoints represents user points balance
+type UserPoints struct {
+	UserID        int `json:"user_id"`
+	PointsBalance int `json:"points_balance"`
+	TotalEarned   int `json:"total_earned"`
+	TotalSpent    int `json:"total_spent"`
+}
+
+// Add item to user cart (authenticated users)
+func addToUserCart(userID, productID, quantity int) error {
+	// For now, we'll create a simple cart_items table that references products directly
+	// Later we can migrate to variants when we implement the variant system
+	query := `
+		INSERT INTO cart_items (user_id, product_id, quantity)
+		VALUES ($1, $2, $3)
+		ON CONFLICT (user_id, product_id)
+		DO UPDATE SET 
+			quantity = cart_items.quantity + $3,
+			updated_at = NOW()
+	`
+
+	_, err := db.Exec(query, userID, productID, quantity)
+	return err
+}
+
+// Add item to guest cart (session-based)
+func addToGuestCart(sessionID string, productID, quantity int) error {
+	query := `
+		INSERT INTO guest_cart_items (session_id, product_id, quantity)
+		VALUES ($1, $2, $3)
+		ON CONFLICT (session_id, product_id)
+		DO UPDATE SET 
+			quantity = guest_cart_items.quantity + $3,
+			updated_at = NOW()
+	`
+
+	_, err := db.Exec(query, sessionID, productID, quantity)
+	return err
+}
+
+// Get user cart items
+func getUserCartItems(userID int) ([]CartItem, error) {
+	query := `
+		SELECT 
+			ci.id, ci.user_id, ci.product_id, ci.quantity,
+			p.name as product_name, p.slug as product_slug,
+			p.base_price as price
+		FROM cart_items ci
+		JOIN products p ON ci.product_id = p.id
+		WHERE ci.user_id = $1 AND p.is_active = true
+		ORDER BY ci.created_at DESC
+	`
+
+	rows, err := db.Query(query, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var items []CartItem
+	for rows.Next() {
+		var item CartItem
+		err := rows.Scan(
+			&item.ID, &item.UserID, &item.ProductID, &item.Quantity,
+			&item.ProductName, &item.ProductSlug, &item.Price,
+		)
+		if err != nil {
+			return nil, err
+		}
+		items = append(items, item)
+	}
+
+	return items, nil
+}
+
+// Get guest cart items
+func getGuestCartItems(sessionID string) ([]CartItem, error) {
+	query := `
+		SELECT 
+			gci.id, gci.product_id, gci.quantity,
+			p.name as product_name, p.slug as product_slug,
+			p.base_price as price
+		FROM guest_cart_items gci
+		JOIN products p ON gci.product_id = p.id
+		WHERE gci.session_id = $1 AND p.is_active = true
+		ORDER BY gci.created_at DESC
+	`
+
+	rows, err := db.Query(query, sessionID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var items []CartItem
+	for rows.Next() {
+		var item CartItem
+		sessionIDStr := sessionID
+		item.SessionID = &sessionIDStr
+
+		err := rows.Scan(
+			&item.ID, &item.ProductID, &item.Quantity,
+			&item.ProductName, &item.ProductSlug, &item.Price,
+		)
+		if err != nil {
+			return nil, err
+		}
+		items = append(items, item)
+	}
+
+	return items, nil
+}
+
+// Update cart item quantity
+func updateCartItemQuantity(userID *int, sessionID *string, productID, quantity int) error {
+	if userID != nil {
+		// User cart
+		if quantity <= 0 {
+			query := `DELETE FROM cart_items WHERE user_id = $1 AND product_id = $2`
+			_, err := db.Exec(query, *userID, productID)
+			return err
+		} else {
+			query := `UPDATE cart_items SET quantity = $3, updated_at = NOW() WHERE user_id = $1 AND product_id = $2`
+			_, err := db.Exec(query, *userID, productID, quantity)
+			return err
+		}
+	} else if sessionID != nil {
+		// Guest cart
+		if quantity <= 0 {
+			query := `DELETE FROM guest_cart_items WHERE session_id = $1 AND product_id = $2`
+			_, err := db.Exec(query, *sessionID, productID)
+			return err
+		} else {
+			query := `UPDATE guest_cart_items SET quantity = $3, updated_at = NOW() WHERE session_id = $1 AND product_id = $2`
+			_, err := db.Exec(query, *sessionID, productID, quantity)
+			return err
+		}
+	}
+
+	return fmt.Errorf("either userID or sessionID must be provided")
+}
+
+// Remove item from cart
+func removeFromCart(userID *int, sessionID *string, productID int) error {
+	if userID != nil {
+		query := `DELETE FROM cart_items WHERE user_id = $1 AND product_id = $2`
+		_, err := db.Exec(query, *userID, productID)
+		return err
+	} else if sessionID != nil {
+		query := `DELETE FROM guest_cart_items WHERE session_id = $1 AND product_id = $2`
+		_, err := db.Exec(query, *sessionID, productID)
+		return err
+	}
+
+	return fmt.Errorf("either userID or sessionID must be provided")
+}
+
+// Migrate guest cart to user cart when user registers/logs in
+func migrateGuestCartToUser(sessionID string, userID int) error {
+	// First, get guest cart items
+	guestItems, err := getGuestCartItems(sessionID)
+	if err != nil {
+		return err
+	}
+
+	// Add each item to user cart
+	for _, item := range guestItems {
+		err := addToUserCart(userID, item.ProductID, item.Quantity)
+		if err != nil {
+			return err
+		}
+	}
+
+	// Clear guest cart
+	query := `DELETE FROM guest_cart_items WHERE session_id = $1`
+	_, err = db.Exec(query, sessionID)
+	return err
+}
+
+// Get cart summary with totals
+func getCartSummary(userID *int, sessionID *string) (*CartSummary, error) {
+	var items []CartItem
+	var err error
+
+	if userID != nil {
+		items, err = getUserCartItems(*userID)
+	} else if sessionID != nil {
+		items, err = getGuestCartItems(*sessionID)
+	} else {
+		return nil, fmt.Errorf("either userID or sessionID must be provided")
+	}
+
+	if err != nil {
+		return nil, err
+	}
+
+	// Calculate totals
+	totalItems := 0
+	subtotal := 0.0
+
+	for _, item := range items {
+		totalItems += item.Quantity
+		subtotal += float64(item.Quantity) * item.Price
+	}
+
+	return &CartSummary{
+		Items:      items,
+		TotalItems: totalItems,
+		Subtotal:   subtotal,
+	}, nil
+}
+
+// Initialize user points when user registers
+func initializeUserPoints(userID int) error {
+	query := `
+		INSERT INTO user_points (user_id, points_balance, total_earned, total_spent)
+		VALUES ($1, 0, 0, 0)
+		ON CONFLICT (user_id) DO NOTHING
+	`
+	_, err := db.Exec(query, userID)
+	return err
+}
+
+// Add points to user account
+func addPointsToUser(userID int, points int, description string, orderID *int) error {
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	// Update points balance
+	query1 := `
+		UPDATE user_points 
+		SET points_balance = points_balance + $2,
+		    total_earned = total_earned + $2,
+		    updated_at = NOW()
+		WHERE user_id = $1
+	`
+	_, err = tx.Exec(query1, userID, points)
+	if err != nil {
+		return err
+	}
+
+	// Record transaction
+	query2 := `
+		INSERT INTO points_transactions (user_id, order_id, transaction_type, points, description)
+		VALUES ($1, $2, 'earned', $3, $4)
+	`
+	_, err = tx.Exec(query2, userID, orderID, points, description)
+	if err != nil {
+		return err
+	}
+
+	return tx.Commit()
+}
+
+// Get user points balance
+func getUserPoints(userID int) (*UserPoints, error) {
+	query := `
+		SELECT user_id, points_balance, total_earned, total_spent
+		FROM user_points
+		WHERE user_id = $1
+	`
+
+	var points UserPoints
+	err := db.QueryRow(query, userID).Scan(
+		&points.UserID, &points.PointsBalance,
+		&points.TotalEarned, &points.TotalSpent,
+	)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &points, nil
+}

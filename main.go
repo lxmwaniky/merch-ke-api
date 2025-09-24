@@ -32,6 +32,18 @@ func main() {
 	// Protected routes (require authentication)
 	app.Get("/api/auth/profile", authMiddleware, profileHandler)
 
+	// Cart routes (work for both authenticated and guest users)
+	app.Post("/api/cart", optionalAuthMiddleware, addToCartHandler)
+	app.Get("/api/cart", optionalAuthMiddleware, getCartHandler)
+	app.Put("/api/cart/:productId", optionalAuthMiddleware, updateCartHandler)
+	app.Delete("/api/cart/:productId", optionalAuthMiddleware, removeFromCartHandler)
+
+	// Cart migration route (for when guest users register/login)
+	app.Post("/api/cart/migrate", authMiddleware, migrateCartHandler)
+
+	// Points routes (authenticated users only)
+	app.Get("/api/points", authMiddleware, getUserPointsHandler)
+
 	// Admin routes (require admin privileges)
 	admin := app.Group("/api/admin", authMiddleware, adminMiddleware)
 	admin.Post("/products", adminCreateProductHandler)
