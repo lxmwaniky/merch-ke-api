@@ -51,6 +51,7 @@ Thumbs.db
 build/
 dist/
 bin/
+docs/
 
 # Temporary files
 temp_*
