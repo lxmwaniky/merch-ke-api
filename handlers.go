@@ -1,9 +1,11 @@
 package main
 
 import (
+	"log"
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/golang-jwt/jwt/v5"
@@ -791,4 +793,347 @@ func fixCartTablesHandler(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{
 		"message": "Cart tables structure fixed successfully",
 	})
+}
+
+// =====================================================
+// ORDER HANDLERS
+// =====================================================
+
+// Create order from cart
+func createOrderHandler(c *fiber.Ctx) error {
+	var req CreateOrderRequest
+
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(400).JSON(fiber.Map{
+			"error": "Invalid request body",
+		})
+	}
+
+	// Get user info (authenticated or guest)
+	user := c.Locals("user")
+	sessionID := c.Get("X-Session-ID", "")
+
+	var userID *int
+	var sessionIDPtr *string
+
+	if user != nil {
+		// Authenticated user
+		userClaims := user.(*Claims)
+		userID = &userClaims.UserID
+	} else if sessionID != "" {
+		// Guest user
+		sessionIDPtr = &sessionID
+	} else {
+		return c.Status(400).JSON(fiber.Map{
+			"error": "Either authentication or session ID required",
+		})
+	}
+
+	// Create order
+	order, err := createOrderFromCart(userID, sessionIDPtr, &req)
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{
+			"error":   "Failed to create order",
+			"details": err.Error(),
+		})
+	}
+
+	return c.Status(201).JSON(fiber.Map{
+		"message": "Order created successfully",
+		"order":   order,
+	})
+}
+
+// Get order by ID
+func getOrderHandler(c *fiber.Ctx) error {
+	orderID, err := strconv.Atoi(c.Params("id"))
+	if err != nil {
+		return c.Status(400).JSON(fiber.Map{
+			"error": "Invalid order ID",
+		})
+	}
+
+	order, err := getOrderByID(orderID)
+	if err != nil {
+		return c.Status(404).JSON(fiber.Map{
+			"error": "Order not found",
+		})
+	}
+
+	// Check if user has access to this order
+	user := c.Locals("user")
+	if user != nil {
+		userClaims := user.(*Claims)
+		// Allow access if it's the user's order or if user is admin
+		if userClaims.Role != "admin" && (order.UserID == nil || *order.UserID != userClaims.UserID) {
+			return c.Status(403).JSON(fiber.Map{
+				"error": "Access denied",
+			})
+		}
+	} else {
+		// For guest users, check session ID
+		sessionID := c.Get("X-Session-ID", "")
+		if order.SessionID == nil || *order.SessionID != sessionID {
+			return c.Status(403).JSON(fiber.Map{
+				"error": "Access denied",
+			})
+		}
+	}
+
+	return c.JSON(order)
+}
+
+// Get user orders
+func getUserOrdersHandler(c *fiber.Ctx) error {
+	user := c.Locals("user")
+	if user == nil {
+		return c.Status(401).JSON(fiber.Map{
+			"error": "Authentication required",
+		})
+	}
+
+	userClaims := user.(*Claims)
+	orders, err := getUserOrders(userClaims.UserID)
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{
+			"error":   "Failed to get orders",
+			"details": err.Error(),
+		})
+	}
+
+	return c.JSON(fiber.Map{
+		"orders": orders,
+		"total":  len(orders),
+	})
+}
+
+// Admin: Get all orders
+func adminGetOrdersHandler(c *fiber.Ctx) error {
+	orders, err := getAllOrders()
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{
+			"error":   "Failed to get orders",
+			"details": err.Error(),
+		})
+	}
+
+	return c.JSON(fiber.Map{
+		"orders": orders,
+		"total":  len(orders),
+	})
+}
+
+// Admin: Update order status
+func adminUpdateOrderStatusHandler(c *fiber.Ctx) error {
+	orderID, err := strconv.Atoi(c.Params("id"))
+	if err != nil {
+		return c.Status(400).JSON(fiber.Map{
+			"error": "Invalid order ID",
+		})
+	}
+
+	var req UpdateOrderStatusRequest
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(400).JSON(fiber.Map{
+			"error": "Invalid request body",
+		})
+	}
+
+	err = updateOrderStatus(orderID, &req)
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{
+			"error":   "Failed to update order status",
+			"details": err.Error(),
+		})
+	}
+
+	return c.JSON(fiber.Map{
+		"message": "Order status updated successfully",
+	})
+}
+
+// Temporary admin endpoint to create order tables
+func initOrderTablesHandler(c *fiber.Ctx) error {
+	queries := []string{
+		// First drop existing tables if they exist (for clean setup)
+		`DROP TABLE IF EXISTS order_items CASCADE`,
+		`DROP TABLE IF EXISTS orders CASCADE`,
+		// Create orders table with all required columns
+		`CREATE TABLE orders (
+			id SERIAL PRIMARY KEY,
+			user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+			session_id VARCHAR(255),
+			order_number VARCHAR(100) UNIQUE NOT NULL,
+			status VARCHAR(50) DEFAULT 'pending',
+			total_amount DECIMAL(10,2) NOT NULL,
+			payment_status VARCHAR(50) DEFAULT 'pending',
+			payment_method VARCHAR(100),
+			shipping_address TEXT,
+			billing_address TEXT,
+			notes TEXT,
+			created_at TIMESTAMP DEFAULT NOW(),
+			updated_at TIMESTAMP DEFAULT NOW()
+		)`,
+		// Create order_items table
+		`CREATE TABLE order_items (
+			id SERIAL PRIMARY KEY,
+			order_id INTEGER REFERENCES orders(id) ON DELETE CASCADE,
+			product_id INTEGER REFERENCES products(id) ON DELETE CASCADE,
+			quantity INTEGER NOT NULL CHECK (quantity > 0),
+			unit_price DECIMAL(10,2) NOT NULL,
+			total_price DECIMAL(10,2) NOT NULL,
+			created_at TIMESTAMP DEFAULT NOW()
+		)`,
+		// Create indexes for better performance
+		`CREATE INDEX idx_orders_user_id ON orders(user_id)`,
+		`CREATE INDEX idx_orders_session_id ON orders(session_id)`,
+		`CREATE INDEX idx_orders_status ON orders(status)`,
+		`CREATE INDEX idx_orders_order_number ON orders(order_number)`,
+		`CREATE INDEX idx_order_items_order_id ON order_items(order_id)`,
+		`CREATE INDEX idx_order_items_product_id ON order_items(product_id)`,
+	}
+
+	for _, query := range queries {
+		_, err := db.Exec(query)
+		if err != nil {
+			return c.Status(500).JSON(fiber.Map{
+				"error":   "Failed to execute query",
+				"details": err.Error(),
+				"query":   query,
+			})
+		}
+	}
+
+	return c.JSON(fiber.Map{
+		"message": "Order tables created successfully",
+	})
+}
+
+// =====================================================
+// VALIDATION MIDDLEWARE
+// =====================================================
+
+// Validate email format
+func isValidEmail(email string) bool {
+	return strings.Contains(email, "@") && strings.Contains(email, ".")
+}
+
+// Validate input middleware
+func validateRegistrationInput(c *fiber.Ctx) error {
+	var req RegisterRequest
+	if err := c.BodyParser(&req); err == nil {
+		// Store parsed request for the handler
+		c.Locals("parsedRequest", req)
+		
+		// Validate email
+		if !isValidEmail(req.Email) {
+			return c.Status(400).JSON(fiber.Map{
+				"error": "Invalid email format",
+			})
+		}
+		
+		// Validate password strength
+		if len(req.Password) < 6 {
+			return c.Status(400).JSON(fiber.Map{
+				"error": "Password must be at least 6 characters long",
+			})
+		}
+		
+		// Validate required fields
+		if strings.TrimSpace(req.Username) == "" || strings.TrimSpace(req.Email) == "" {
+			return c.Status(400).JSON(fiber.Map{
+				"error": "Username and email are required",
+			})
+		}
+	}
+	
+	return c.Next()
+}
+
+// Validate product input
+func validateProductInput(c *fiber.Ctx) error {
+	var req CreateProductRequest
+	if err := c.BodyParser(&req); err == nil {
+		c.Locals("parsedRequest", req)
+		
+		if strings.TrimSpace(req.Name) == "" {
+			return c.Status(400).JSON(fiber.Map{
+				"error": "Product name is required",
+			})
+		}
+		
+		if req.BasePrice <= 0 {
+			return c.Status(400).JSON(fiber.Map{
+				"error": "Product price must be greater than 0",
+			})
+		}
+		
+		if req.CategoryID <= 0 {
+			return c.Status(400).JSON(fiber.Map{
+				"error": "Valid category ID is required",
+			})
+		}
+	}
+	
+	return c.Next()
+}
+
+// Validate cart input
+func validateCartInput(c *fiber.Ctx) error {
+	var req AddToCartRequest
+	if err := c.BodyParser(&req); err == nil {
+		c.Locals("parsedRequest", req)
+		
+		if req.ProductID <= 0 {
+			return c.Status(400).JSON(fiber.Map{
+				"error": "Valid product ID is required",
+			})
+		}
+		
+		if req.Quantity <= 0 || req.Quantity > 100 {
+			return c.Status(400).JSON(fiber.Map{
+				"error": "Quantity must be between 1 and 100",
+			})
+		}
+	}
+	
+	return c.Next()
+}
+
+// =====================================================
+// LOGGING MIDDLEWARE
+// =====================================================
+
+// Request logging middleware
+func loggingMiddleware(c *fiber.Ctx) error {
+	start := time.Now()
+	
+	// Process request
+	err := c.Next()
+	
+	// Log request details
+	duration := time.Since(start)
+	status := c.Response().StatusCode()
+	
+	log.Printf(
+		"%s %s - %d - %v - %s",
+		c.Method(),
+		c.Path(),
+		status,
+		duration,
+		c.IP(),
+	)
+	
+	return err
+}
+
+// Error logging middleware
+func errorLoggingMiddleware(c *fiber.Ctx) error {
+	err := c.Next()
+	
+	if err != nil {
+		log.Printf("ERROR: %s %s - %v", c.Method(), c.Path(), err)
+	}
+	
+	return err
 }

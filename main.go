@@ -18,6 +18,8 @@ func main() {
 	})
 
 	app.Use(cors.New())
+	app.Use(loggingMiddleware)
+	app.Use(errorLoggingMiddleware)
 
 	// Public routes
 	app.Get("/health", healthHandler)
@@ -44,14 +46,23 @@ func main() {
 	// Points routes (authenticated users only)
 	app.Get("/api/points", authMiddleware, getUserPointsHandler)
 
+	// Order routes
+	app.Post("/api/orders", optionalAuthMiddleware, createOrderHandler)           // Create order from cart
+	app.Get("/api/orders/:id", optionalAuthMiddleware, getOrderHandler)          // Get specific order
+	app.Get("/api/orders", authMiddleware, getUserOrdersHandler)                 // Get user's orders
+
 	// Admin routes (require admin privileges)
 	admin := app.Group("/api/admin", authMiddleware, adminMiddleware)
 	admin.Post("/products", adminCreateProductHandler)
 	admin.Put("/products/:id", adminUpdateProductHandler)
 	admin.Delete("/products/:id", adminDeleteProductHandler)
 	admin.Get("/products", adminGetProductsHandler)
-	admin.Post("/init-cart-tables", initCartTablesHandler) // Temporary endpoint
-	admin.Post("/fix-cart-tables", fixCartTablesHandler)   // Fix cart tables structure
+	admin.Get("/orders", adminGetOrdersHandler)                    // Get all orders
+	admin.Put("/orders/:id/status", adminUpdateOrderStatusHandler) // Update order status
+	admin.Post("/init-cart-tables", initCartTablesHandler)         // Temporary endpoint
+	admin.Post("/init-order-tables", initOrderTablesHandler)       // Initialize order tables
+	admin.Post("/fix-cart-tables", fixCartTablesHandler)           // Fix cart tables structure
+	admin.Post("/init-order-tables", initOrderTablesHandler)       // Create order tables
 
 	// Temporary public endpoint to promote user (REMOVE IN PRODUCTION)
 	app.Post("/api/temp/promote-admin", promoteToAdminHandler)
