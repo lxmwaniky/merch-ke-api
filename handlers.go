@@ -427,8 +427,8 @@ func addToCartHandler(c *fiber.Ctx) error {
 
 	if user != nil {
 		// Authenticated user - use user cart
-		userClaims := user.(*jwt.MapClaims)
-		userID := int((*userClaims)["user_id"].(float64))
+		userClaims := user.(*Claims)
+		userID := userClaims.UserID
 
 		err := addToUserCart(userID, req.ProductID, req.Quantity)
 		if err != nil {
@@ -470,8 +470,8 @@ func getCartHandler(c *fiber.Ctx) error {
 
 	if user != nil {
 		// Authenticated user
-		userClaims := user.(*jwt.MapClaims)
-		userID := int((*userClaims)["user_id"].(float64))
+		userClaims := user.(*Claims)
+		userID := userClaims.UserID
 
 		summary, err := getCartSummary(&userID, nil)
 		if err != nil {
@@ -526,8 +526,8 @@ func updateCartHandler(c *fiber.Ctx) error {
 
 	if user != nil {
 		// Authenticated user
-		userClaims := user.(*jwt.MapClaims)
-		userID := int((*userClaims)["user_id"].(float64))
+		userClaims := user.(*Claims)
+		userID := userClaims.UserID
 
 		err := updateCartItemQuantity(&userID, nil, productID, req.Quantity)
 		if err != nil {
@@ -577,8 +577,8 @@ func removeFromCartHandler(c *fiber.Ctx) error {
 
 	if user != nil {
 		// Authenticated user
-		userClaims := user.(*jwt.MapClaims)
-		userID := int((*userClaims)["user_id"].(float64))
+		userClaims := user.(*Claims)
+		userID := userClaims.UserID
 
 		err := removeFromCart(&userID, nil, productID)
 		if err != nil {
@@ -619,8 +619,8 @@ func getUserPointsHandler(c *fiber.Ctx) error {
 		})
 	}
 
-	userClaims := user.(*jwt.MapClaims)
-	userID := int((*userClaims)["user_id"].(float64))
+	userClaims := user.(*Claims)
+	userID := userClaims.UserID
 
 	points, err := getUserPoints(userID)
 	if err != nil {
@@ -649,8 +649,8 @@ func migrateCartHandler(c *fiber.Ctx) error {
 		})
 	}
 
-	userClaims := user.(*jwt.MapClaims)
-	userID := int((*userClaims)["user_id"].(float64))
+	userClaims := user.(*Claims)
+	userID := userClaims.UserID
 
 	err := migrateGuestCartToUser(sessionID, userID)
 	if err != nil {
@@ -662,5 +662,133 @@ func migrateCartHandler(c *fiber.Ctx) error {
 
 	return c.JSON(fiber.Map{
 		"message": "Guest cart migrated successfully",
+	})
+}
+
+// Temporary admin endpoint to create cart tables
+func initCartTablesHandler(c *fiber.Ctx) error {
+	queries := []string{
+		`CREATE TABLE IF NOT EXISTS cart_items (
+			id SERIAL PRIMARY KEY,
+			user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+			product_id INTEGER REFERENCES products(id) ON DELETE CASCADE,
+			quantity INTEGER NOT NULL DEFAULT 1 CHECK (quantity > 0),
+			created_at TIMESTAMP DEFAULT NOW(),
+			updated_at TIMESTAMP DEFAULT NOW(),
+			UNIQUE(user_id, product_id)
+		)`,
+		`CREATE TABLE IF NOT EXISTS guest_cart_items (
+			id SERIAL PRIMARY KEY,
+			session_id VARCHAR(255) NOT NULL,
+			product_id INTEGER REFERENCES products(id) ON DELETE CASCADE,
+			quantity INTEGER NOT NULL DEFAULT 1 CHECK (quantity > 0),
+			created_at TIMESTAMP DEFAULT NOW(),
+			updated_at TIMESTAMP DEFAULT NOW(),
+			UNIQUE(session_id, product_id)
+		)`,
+		`CREATE TABLE IF NOT EXISTS user_points (
+			id SERIAL PRIMARY KEY,
+			user_id INTEGER REFERENCES users(id) ON DELETE CASCADE UNIQUE,
+			points_balance INTEGER DEFAULT 0,
+			total_earned INTEGER DEFAULT 0,
+			total_spent INTEGER DEFAULT 0,
+			created_at TIMESTAMP DEFAULT NOW(),
+			updated_at TIMESTAMP DEFAULT NOW()
+		)`,
+		`CREATE TABLE IF NOT EXISTS points_transactions (
+			id SERIAL PRIMARY KEY,
+			user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+			transaction_type VARCHAR(20) NOT NULL,
+			points INTEGER NOT NULL,
+			description TEXT,
+			order_id INTEGER,
+			created_at TIMESTAMP DEFAULT NOW()
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_cart_items_user_id ON cart_items(user_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_guest_cart_items_session ON guest_cart_items(session_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_user_points_user_id ON user_points(user_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_points_transactions_user_id ON points_transactions(user_id)`,
+	}
+
+	for _, query := range queries {
+		_, err := db.Exec(query)
+		if err != nil {
+			return c.Status(500).JSON(fiber.Map{
+				"error":   "Failed to execute query",
+				"details": err.Error(),
+				"query":   query,
+			})
+		}
+	}
+
+	return c.JSON(fiber.Map{
+		"message": "Cart tables created successfully",
+	})
+}
+
+// Temporary endpoint to promote user to admin (REMOVE IN PRODUCTION)
+func promoteToAdminHandler(c *fiber.Ctx) error {
+	var req struct {
+		UserID int `json:"user_id"`
+	}
+
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(400).JSON(fiber.Map{"error": "Invalid request body"})
+	}
+
+	query := `UPDATE users SET role = 'admin' WHERE id = $1`
+	_, err := db.Exec(query, req.UserID)
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{
+			"error":   "Failed to promote user",
+			"details": err.Error(),
+		})
+	}
+
+	return c.JSON(fiber.Map{
+		"message": "User promoted to admin successfully",
+	})
+}
+
+// Temporary endpoint to fix cart tables structure
+func fixCartTablesHandler(c *fiber.Ctx) error {
+	queries := []string{
+		`DROP TABLE IF EXISTS cart_items CASCADE`,
+		`DROP TABLE IF EXISTS guest_cart_items CASCADE`,
+		`CREATE TABLE IF NOT EXISTS cart_items (
+			id SERIAL PRIMARY KEY,
+			user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+			product_id INTEGER REFERENCES products(id) ON DELETE CASCADE,
+			quantity INTEGER NOT NULL DEFAULT 1 CHECK (quantity > 0),
+			created_at TIMESTAMP DEFAULT NOW(),
+			updated_at TIMESTAMP DEFAULT NOW(),
+			UNIQUE(user_id, product_id)
+		)`,
+		`CREATE TABLE IF NOT EXISTS guest_cart_items (
+			id SERIAL PRIMARY KEY,
+			session_id VARCHAR(255) NOT NULL,
+			product_id INTEGER REFERENCES products(id) ON DELETE CASCADE,
+			quantity INTEGER NOT NULL DEFAULT 1 CHECK (quantity > 0),
+			created_at TIMESTAMP DEFAULT NOW(),
+			updated_at TIMESTAMP DEFAULT NOW(),
+			UNIQUE(session_id, product_id)
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_cart_items_user_id ON cart_items(user_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_guest_cart_items_session ON guest_cart_items(session_id)`,
+	}
+
+	for _, query := range queries {
+		_, err := db.Exec(query)
+		if err != nil {
+			return c.Status(500).JSON(fiber.Map{
+				"error":   "Failed to execute query",
+				"details": err.Error(),
+				"query":   query,
+			})
+		}
+	}
+
+	return c.JSON(fiber.Map{
+		"message": "Cart tables structure fixed successfully",
 	})
 }

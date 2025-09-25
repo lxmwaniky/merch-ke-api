@@ -50,6 +50,11 @@ func main() {
 	admin.Put("/products/:id", adminUpdateProductHandler)
 	admin.Delete("/products/:id", adminDeleteProductHandler)
 	admin.Get("/products", adminGetProductsHandler)
+	admin.Post("/init-cart-tables", initCartTablesHandler) // Temporary endpoint
+	admin.Post("/fix-cart-tables", fixCartTablesHandler)   // Fix cart tables structure
+
+	// Temporary public endpoint to promote user (REMOVE IN PRODUCTION)
+	app.Post("/api/temp/promote-admin", promoteToAdminHandler)
 
 	log.Println("🚀 Merch Ke API starting on http://161.35.104.94:8080")
 	log.Fatal(app.Listen("0.0.0.0:8080"))
