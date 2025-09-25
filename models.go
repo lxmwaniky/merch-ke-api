@@ -294,20 +294,20 @@ type UserPoints struct {
 
 // Order represents an order
 type Order struct {
-	ID              int          `json:"id"`
-	UserID          *int         `json:"user_id,omitempty"` // nil for guest orders
-	SessionID       *string      `json:"session_id,omitempty"`
-	OrderNumber     string       `json:"order_number"`
-	Status          string       `json:"status"` // pending, confirmed, processing, shipped, delivered, cancelled
-	TotalAmount     float64      `json:"total_amount"`
-	PaymentStatus   string       `json:"payment_status"` // pending, paid, failed, refunded
-	PaymentMethod   *string      `json:"payment_method,omitempty"`
-	ShippingAddress *string      `json:"shipping_address,omitempty"`
-	BillingAddress  *string      `json:"billing_address,omitempty"`
-	Notes           *string      `json:"notes,omitempty"`
-	CreatedAt       string       `json:"created_at"`
-	UpdatedAt       string       `json:"updated_at"`
-	Items           []OrderItem  `json:"items,omitempty"`
+	ID              int         `json:"id"`
+	UserID          *int        `json:"user_id,omitempty"` // nil for guest orders
+	SessionID       *string     `json:"session_id,omitempty"`
+	OrderNumber     string      `json:"order_number"`
+	Status          string      `json:"status"` // pending, confirmed, processing, shipped, delivered, cancelled
+	TotalAmount     float64     `json:"total_amount"`
+	PaymentStatus   string      `json:"payment_status"` // pending, paid, failed, refunded
+	PaymentMethod   *string     `json:"payment_method,omitempty"`
+	ShippingAddress *string     `json:"shipping_address,omitempty"`
+	BillingAddress  *string     `json:"billing_address,omitempty"`
+	Notes           *string     `json:"notes,omitempty"`
+	CreatedAt       string      `json:"created_at"`
+	UpdatedAt       string      `json:"updated_at"`
+	Items           []OrderItem `json:"items,omitempty"`
 }
 
 // OrderItem represents an item in an order
@@ -614,7 +614,7 @@ func getUserPoints(userID int) (*UserPoints, error) {
 func createOrderFromCart(userID *int, sessionID *string, req *CreateOrderRequest) (*Order, error) {
 	// Generate unique order number
 	orderNumber := generateOrderNumber()
-	
+
 	// Start transaction
 	tx, err := db.Begin()
 	if err != nil {
@@ -635,11 +635,11 @@ func createOrderFromCart(userID *int, sessionID *string, req *CreateOrderRequest
 	} else if sessionID != nil {
 		cartItems, err = getGuestCartItems(*sessionID)
 	}
-	
+
 	if err != nil {
 		return nil, err
 	}
-	
+
 	if len(cartItems) == 0 {
 		return nil, fmt.Errorf("cart is empty")
 	}
@@ -657,7 +657,7 @@ func createOrderFromCart(userID *int, sessionID *string, req *CreateOrderRequest
 		VALUES ($1, $2, $3, 'pending', $4, 'pending', $5, $6, $7)
 		RETURNING id
 	`
-	
+
 	err = tx.QueryRow(orderQuery, userID, sessionID, orderNumber, totalAmount, req.ShippingAddress, req.BillingAddress, req.Notes).Scan(&orderID)
 	if err != nil {
 		return nil, err
@@ -682,7 +682,7 @@ func createOrderFromCart(userID *int, sessionID *string, req *CreateOrderRequest
 	} else if sessionID != nil {
 		_, err = tx.Exec("DELETE FROM guest_cart_items WHERE session_id = $1", *sessionID)
 	}
-	
+
 	if err != nil {
 		return nil, err
 	}
@@ -704,15 +704,15 @@ func getOrderByID(orderID int) (*Order, error) {
 		FROM orders 
 		WHERE id = $1
 	`
-	
+
 	var order Order
 	err := db.QueryRow(query, orderID).Scan(
-		&order.ID, &order.UserID, &order.SessionID, &order.OrderNumber, 
+		&order.ID, &order.UserID, &order.SessionID, &order.OrderNumber,
 		&order.Status, &order.TotalAmount, &order.PaymentStatus,
-		&order.PaymentMethod, &order.ShippingAddress, &order.BillingAddress, 
+		&order.PaymentMethod, &order.ShippingAddress, &order.BillingAddress,
 		&order.Notes, &order.CreatedAt, &order.UpdatedAt,
 	)
-	
+
 	if err != nil {
 		return nil, err
 	}
@@ -725,7 +725,7 @@ func getOrderByID(orderID int) (*Order, error) {
 		JOIN products p ON oi.product_id = p.id
 		WHERE oi.order_id = $1
 	`
-	
+
 	rows, err := db.Query(itemsQuery, orderID)
 	if err != nil {
 		return nil, err
@@ -744,7 +744,7 @@ func getOrderByID(orderID int) (*Order, error) {
 		}
 		items = append(items, item)
 	}
-	
+
 	order.Items = items
 	return &order, nil
 }
@@ -758,7 +758,7 @@ func getUserOrders(userID int) ([]Order, error) {
 		WHERE user_id = $1
 		ORDER BY created_at DESC
 	`
-	
+
 	rows, err := db.Query(query, userID)
 	if err != nil {
 		return nil, err
@@ -779,7 +779,7 @@ func getUserOrders(userID int) ([]Order, error) {
 		}
 		orders = append(orders, order)
 	}
-	
+
 	return orders, nil
 }
 
@@ -812,7 +812,7 @@ func updateOrderStatus(orderID int, req *UpdateOrderStatusRequest) error {
 	}
 
 	setParts = append(setParts, fmt.Sprintf("updated_at = NOW()"))
-	
+
 	query := fmt.Sprintf("UPDATE orders SET %s WHERE id = $%d", strings.Join(setParts, ", "), argIndex)
 	args = append(args, orderID)
 
@@ -828,7 +828,7 @@ func getAllOrders() ([]Order, error) {
 		FROM orders 
 		ORDER BY created_at DESC
 	`
-	
+
 	rows, err := db.Query(query)
 	if err != nil {
 		return nil, err
@@ -849,7 +849,7 @@ func getAllOrders() ([]Order, error) {
 		}
 		orders = append(orders, order)
 	}
-	
+
 	return orders, nil
 }
 

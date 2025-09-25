@@ -1024,21 +1024,21 @@ func validateRegistrationInput(c *fiber.Ctx) error {
 	if err := c.BodyParser(&req); err == nil {
 		// Store parsed request for the handler
 		c.Locals("parsedRequest", req)
-		
+
 		// Validate email
 		if !isValidEmail(req.Email) {
 			return c.Status(400).JSON(fiber.Map{
 				"error": "Invalid email format",
 			})
 		}
-		
+
 		// Validate password strength
 		if len(req.Password) < 6 {
 			return c.Status(400).JSON(fiber.Map{
 				"error": "Password must be at least 6 characters long",
 			})
 		}
-		
+
 		// Validate required fields
 		if strings.TrimSpace(req.Username) == "" || strings.TrimSpace(req.Email) == "" {
 			return c.Status(400).JSON(fiber.Map{
@@ -1046,7 +1046,7 @@ func validateRegistrationInput(c *fiber.Ctx) error {
 			})
 		}
 	}
-	
+
 	return c.Next()
 }
 
@@ -1055,26 +1055,26 @@ func validateProductInput(c *fiber.Ctx) error {
 	var req CreateProductRequest
 	if err := c.BodyParser(&req); err == nil {
 		c.Locals("parsedRequest", req)
-		
+
 		if strings.TrimSpace(req.Name) == "" {
 			return c.Status(400).JSON(fiber.Map{
 				"error": "Product name is required",
 			})
 		}
-		
+
 		if req.BasePrice <= 0 {
 			return c.Status(400).JSON(fiber.Map{
 				"error": "Product price must be greater than 0",
 			})
 		}
-		
+
 		if req.CategoryID <= 0 {
 			return c.Status(400).JSON(fiber.Map{
 				"error": "Valid category ID is required",
 			})
 		}
 	}
-	
+
 	return c.Next()
 }
 
@@ -1083,20 +1083,20 @@ func validateCartInput(c *fiber.Ctx) error {
 	var req AddToCartRequest
 	if err := c.BodyParser(&req); err == nil {
 		c.Locals("parsedRequest", req)
-		
+
 		if req.ProductID <= 0 {
 			return c.Status(400).JSON(fiber.Map{
 				"error": "Valid product ID is required",
 			})
 		}
-		
+
 		if req.Quantity <= 0 || req.Quantity > 100 {
 			return c.Status(400).JSON(fiber.Map{
 				"error": "Quantity must be between 1 and 100",
 			})
 		}
 	}
-	
+
 	return c.Next()
 }
 
@@ -1107,14 +1107,14 @@ func validateCartInput(c *fiber.Ctx) error {
 // Request logging middleware
 func loggingMiddleware(c *fiber.Ctx) error {
 	start := time.Now()
-	
+
 	// Process request
 	err := c.Next()
-	
+
 	// Log request details
 	duration := time.Since(start)
 	status := c.Response().StatusCode()
-	
+
 	log.Printf(
 		"%s %s - %d - %v - %s",
 		c.Method(),
@@ -1123,17 +1123,17 @@ func loggingMiddleware(c *fiber.Ctx) error {
 		duration,
 		c.IP(),
 	)
-	
+
 	return err
 }
 
 // Error logging middleware
 func errorLoggingMiddleware(c *fiber.Ctx) error {
 	err := c.Next()
-	
+
 	if err != nil {
 		log.Printf("ERROR: %s %s - %v", c.Method(), c.Path(), err)
 	}
-	
+
 	return err
 }

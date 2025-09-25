@@ -47,9 +47,9 @@ func main() {
 	app.Get("/api/points", authMiddleware, getUserPointsHandler)
 
 	// Order routes
-	app.Post("/api/orders", optionalAuthMiddleware, createOrderHandler)           // Create order from cart
-	app.Get("/api/orders/:id", optionalAuthMiddleware, getOrderHandler)          // Get specific order
-	app.Get("/api/orders", authMiddleware, getUserOrdersHandler)                 // Get user's orders
+	app.Post("/api/orders", optionalAuthMiddleware, createOrderHandler) // Create order from cart
+	app.Get("/api/orders/:id", optionalAuthMiddleware, getOrderHandler) // Get specific order
+	app.Get("/api/orders", authMiddleware, getUserOrdersHandler)        // Get user's orders
 
 	// Admin routes (require admin privileges)
 	admin := app.Group("/api/admin", authMiddleware, adminMiddleware)
