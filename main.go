@@ -59,13 +59,6 @@ func main() {
 	admin.Get("/products", adminGetProductsHandler)
 	admin.Get("/orders", adminGetOrdersHandler)                    // Get all orders
 	admin.Put("/orders/:id/status", adminUpdateOrderStatusHandler) // Update order status
-	admin.Post("/init-cart-tables", initCartTablesHandler)         // Temporary endpoint
-	admin.Post("/init-order-tables", initOrderTablesHandler)       // Initialize order tables
-	admin.Post("/fix-cart-tables", fixCartTablesHandler)           // Fix cart tables structure
-	admin.Post("/init-order-tables", initOrderTablesHandler)       // Create order tables
-
-	// Temporary public endpoint to promote user (REMOVE IN PRODUCTION)
-	app.Post("/api/temp/promote-admin", promoteToAdminHandler)
 
 	log.Println("🚀 Merch Ke API starting on http://localhost:8080")
 	log.Fatal(app.Listen("0.0.0.0:8080"))
