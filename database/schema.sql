@@ -126,7 +126,7 @@ CREATE TABLE auth.user_points (
 CREATE TABLE auth.points_transactions (
     id SERIAL PRIMARY KEY,
     user_id INTEGER REFERENCES auth.users(id) ON DELETE CASCADE,
-    order_id INTEGER REFERENCES orders.orders(id),
+    order_id INTEGER,
     transaction_type VARCHAR(20) NOT NULL,
     points INTEGER NOT NULL,
     description TEXT,
@@ -236,8 +236,18 @@ CREATE INDEX idx_orders_ordered_at ON orders.orders(ordered_at);
 CREATE INDEX idx_orders_order_items_order ON orders.order_items(order_id);
 CREATE INDEX idx_orders_order_items_variant ON orders.order_items(variant_id);
 
-CREATE INDEX idx_orders_cart_variant ON orders.cart_items(variant_id);
+CREATE INDEX idx_orders_cart_user ON orders.cart_items(user_id);
+CREATE INDEX idx_orders_cart_product ON orders.cart_items(product_id);
 CREATE INDEX idx_orders_guest_cart_session ON orders.guest_cart_items(session_id);
 
 -- Partial index for active products
 CREATE INDEX idx_catalog_products_active_slug ON catalog.products (slug) WHERE is_active;
+
+-- =====================================================
+-- ADD FOREIGN KEY CONSTRAINTS AFTER TABLE CREATION
+-- =====================================================
+
+-- Add foreign key constraint for points_transactions after orders table exists
+ALTER TABLE auth.points_transactions 
+ADD CONSTRAINT fk_points_transactions_order 
+FOREIGN KEY (order_id) REFERENCES orders.orders(id);
