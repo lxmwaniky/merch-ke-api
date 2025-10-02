@@ -366,7 +366,7 @@ func adminDeleteProductHandler(c *fiber.Ctx) error {
 func adminGetProductsHandler(c *fiber.Ctx) error {
 	query := `
 		SELECT id, name, slug, description, category_id, base_price, is_active, is_featured 
-		FROM products 
+		FROM catalog.products 
 		ORDER BY created_at DESC
 	`
 

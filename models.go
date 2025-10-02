@@ -32,7 +32,7 @@ type Category struct {
 func getProductsFromDB() ([]Product, error) {
 	query := `
 		SELECT id, name, slug, description, category_id, base_price, is_active, is_featured 
-		FROM products 
+		FROM catalog.products 
 		WHERE is_active = true 
 		ORDER BY created_at DESC
 	`
@@ -60,7 +60,7 @@ func getProductsFromDB() ([]Product, error) {
 func getProductByID(id int) (*Product, error) {
 	query := `
 		SELECT id, name, slug, description, category_id, base_price, is_active, is_featured 
-		FROM products 
+		FROM catalog.products 
 		WHERE id = $1 AND is_active = true
 	`
 
@@ -77,7 +77,7 @@ func getProductByID(id int) (*Product, error) {
 func getCategoriesFromDB() ([]Category, error) {
 	query := `
 		SELECT id, name, slug, description, parent_id, is_active 
-		FROM categories 
+		FROM catalog.categories 
 		WHERE is_active = true 
 		ORDER BY sort_order, name
 	`
@@ -133,7 +133,7 @@ type UpdateProductRequest struct {
 // Create new product (admin only)
 func createProduct(req *CreateProductRequest) (*Product, error) {
 	query := `
-		INSERT INTO products (name, slug, description, short_description, category_id, base_price, sku_prefix, is_featured, weight, dimensions)
+		INSERT INTO catalog.products (name, slug, description, short_description, category_id, base_price, sku_prefix, is_featured, weight, dimensions)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 		RETURNING id, name, slug, description, category_id, base_price, is_active, is_featured
 	`
@@ -213,7 +213,7 @@ func updateProduct(id int, req *UpdateProductRequest) (*Product, error) {
 	whereClause := fmt.Sprintf("WHERE id = $%d", argIndex)
 
 	query := fmt.Sprintf(`
-		UPDATE products 
+		UPDATE catalog.products 
 		SET %s 
 		%s
 		RETURNING id, name, slug, description, category_id, base_price, is_active, is_featured
@@ -234,7 +234,7 @@ func updateProduct(id int, req *UpdateProductRequest) (*Product, error) {
 
 // Soft delete product (admin only)
 func deleteProduct(id int) error {
-	query := `UPDATE products SET is_active = false, updated_at = NOW() WHERE id = $1`
+	query := `UPDATE catalog.products SET is_active = false, updated_at = NOW() WHERE id = $1`
 
 	result, err := db.Exec(query, id)
 	if err != nil {
@@ -338,14 +338,12 @@ type UpdateOrderStatusRequest struct {
 
 // Add item to user cart (authenticated users)
 func addToUserCart(userID, productID, quantity int) error {
-	// For now, we'll create a simple cart_items table that references products directly
-	// Later we can migrate to variants when we implement the variant system
 	query := `
-		INSERT INTO cart_items (user_id, product_id, quantity)
+		INSERT INTO orders.cart_items (user_id, product_id, quantity)
 		VALUES ($1, $2, $3)
 		ON CONFLICT (user_id, product_id)
 		DO UPDATE SET 
-			quantity = cart_items.quantity + $3,
+			quantity = orders.cart_items.quantity + $3,
 			updated_at = NOW()
 	`
 
@@ -356,11 +354,11 @@ func addToUserCart(userID, productID, quantity int) error {
 // Add item to guest cart (session-based)
 func addToGuestCart(sessionID string, productID, quantity int) error {
 	query := `
-		INSERT INTO guest_cart_items (session_id, product_id, quantity)
+		INSERT INTO orders.guest_cart_items (session_id, product_id, quantity)
 		VALUES ($1, $2, $3)
 		ON CONFLICT (session_id, product_id)
 		DO UPDATE SET 
-			quantity = guest_cart_items.quantity + $3,
+			quantity = orders.guest_cart_items.quantity + $3,
 			updated_at = NOW()
 	`
 
@@ -375,8 +373,8 @@ func getUserCartItems(userID int) ([]CartItem, error) {
 			ci.id, ci.user_id, ci.product_id, ci.quantity,
 			p.name as product_name, p.slug as product_slug,
 			p.base_price as price
-		FROM cart_items ci
-		JOIN products p ON ci.product_id = p.id
+		FROM orders.cart_items ci
+		JOIN catalog.products p ON ci.product_id = p.id
 		WHERE ci.user_id = $1 AND p.is_active = true
 		ORDER BY ci.created_at DESC
 	`
@@ -410,8 +408,8 @@ func getGuestCartItems(sessionID string) ([]CartItem, error) {
 			gci.id, gci.product_id, gci.quantity,
 			p.name as product_name, p.slug as product_slug,
 			p.base_price as price
-		FROM guest_cart_items gci
-		JOIN products p ON gci.product_id = p.id
+		FROM orders.guest_cart_items gci
+		JOIN catalog.products p ON gci.product_id = p.id
 		WHERE gci.session_id = $1 AND p.is_active = true
 		ORDER BY gci.created_at DESC
 	`
@@ -446,22 +444,22 @@ func updateCartItemQuantity(userID *int, sessionID *string, productID, quantity 
 	if userID != nil {
 		// User cart
 		if quantity <= 0 {
-			query := `DELETE FROM cart_items WHERE user_id = $1 AND product_id = $2`
+			query := `DELETE FROM orders.cart_items WHERE user_id = $1 AND product_id = $2`
 			_, err := db.Exec(query, *userID, productID)
 			return err
 		} else {
-			query := `UPDATE cart_items SET quantity = $3, updated_at = NOW() WHERE user_id = $1 AND product_id = $2`
+			query := `UPDATE orders.cart_items SET quantity = $3, updated_at = NOW() WHERE user_id = $1 AND product_id = $2`
 			_, err := db.Exec(query, *userID, productID, quantity)
 			return err
 		}
 	} else if sessionID != nil {
 		// Guest cart
 		if quantity <= 0 {
-			query := `DELETE FROM guest_cart_items WHERE session_id = $1 AND product_id = $2`
+			query := `DELETE FROM orders.guest_cart_items WHERE session_id = $1 AND product_id = $2`
 			_, err := db.Exec(query, *sessionID, productID)
 			return err
 		} else {
-			query := `UPDATE guest_cart_items SET quantity = $3, updated_at = NOW() WHERE session_id = $1 AND product_id = $2`
+			query := `UPDATE orders.guest_cart_items SET quantity = $3, updated_at = NOW() WHERE session_id = $1 AND product_id = $2`
 			_, err := db.Exec(query, *sessionID, productID, quantity)
 			return err
 		}
@@ -473,11 +471,11 @@ func updateCartItemQuantity(userID *int, sessionID *string, productID, quantity 
 // Remove item from cart
 func removeFromCart(userID *int, sessionID *string, productID int) error {
 	if userID != nil {
-		query := `DELETE FROM cart_items WHERE user_id = $1 AND product_id = $2`
+		query := `DELETE FROM orders.cart_items WHERE user_id = $1 AND product_id = $2`
 		_, err := db.Exec(query, *userID, productID)
 		return err
 	} else if sessionID != nil {
-		query := `DELETE FROM guest_cart_items WHERE session_id = $1 AND product_id = $2`
+		query := `DELETE FROM orders.guest_cart_items WHERE session_id = $1 AND product_id = $2`
 		_, err := db.Exec(query, *sessionID, productID)
 		return err
 	}
@@ -502,7 +500,7 @@ func migrateGuestCartToUser(sessionID string, userID int) error {
 	}
 
 	// Clear guest cart
-	query := `DELETE FROM guest_cart_items WHERE session_id = $1`
+	query := `DELETE FROM orders.guest_cart_items WHERE session_id = $1`
 	_, err = db.Exec(query, sessionID)
 	return err
 }
@@ -543,7 +541,7 @@ func getCartSummary(userID *int, sessionID *string) (*CartSummary, error) {
 // Initialize user points when user registers
 func initializeUserPoints(userID int) error {
 	query := `
-		INSERT INTO user_points (user_id, points_balance, total_earned, total_spent)
+		INSERT INTO auth.user_points (user_id, points_balance, total_earned, total_spent)
 		VALUES ($1, 0, 0, 0)
 		ON CONFLICT (user_id) DO NOTHING
 	`
@@ -561,7 +559,7 @@ func addPointsToUser(userID int, points int, description string, orderID *int) e
 
 	// Update points balance
 	query1 := `
-		UPDATE user_points 
+		UPDATE auth.user_points 
 		SET points_balance = points_balance + $2,
 		    total_earned = total_earned + $2,
 		    updated_at = NOW()
@@ -574,7 +572,7 @@ func addPointsToUser(userID int, points int, description string, orderID *int) e
 
 	// Record transaction
 	query2 := `
-		INSERT INTO points_transactions (user_id, order_id, transaction_type, points, description)
+		INSERT INTO auth.points_transactions (user_id, order_id, transaction_type, points, description)
 		VALUES ($1, $2, 'earned', $3, $4)
 	`
 	_, err = tx.Exec(query2, userID, orderID, points, description)
@@ -589,7 +587,7 @@ func addPointsToUser(userID int, points int, description string, orderID *int) e
 func getUserPoints(userID int) (*UserPoints, error) {
 	query := `
 		SELECT user_id, points_balance, total_earned, total_spent
-		FROM user_points
+		FROM auth.user_points
 		WHERE user_id = $1
 	`
 
@@ -653,7 +651,7 @@ func createOrderFromCart(userID *int, sessionID *string, req *CreateOrderRequest
 	// Create order
 	var orderID int
 	orderQuery := `
-		INSERT INTO orders (user_id, session_id, order_number, status, total_amount, payment_status, shipping_address, billing_address, notes)
+		INSERT INTO orders.orders (user_id, session_id, order_number, status, total_amount, payment_status, shipping_address, billing_address, notes)
 		VALUES ($1, $2, $3, 'pending', $4, 'pending', $5, $6, $7)
 		RETURNING id
 	`
@@ -667,7 +665,7 @@ func createOrderFromCart(userID *int, sessionID *string, req *CreateOrderRequest
 	for _, item := range cartItems {
 		totalPrice := float64(item.Quantity) * item.Price
 		orderItemQuery := `
-			INSERT INTO order_items (order_id, product_id, quantity, unit_price, total_price)
+			INSERT INTO orders.order_items (order_id, product_id, quantity, unit_price, total_price)
 			VALUES ($1, $2, $3, $4, $5)
 		`
 		_, err = tx.Exec(orderItemQuery, orderID, item.ProductID, item.Quantity, item.Price, totalPrice)
@@ -678,9 +676,9 @@ func createOrderFromCart(userID *int, sessionID *string, req *CreateOrderRequest
 
 	// Clear cart after order creation
 	if userID != nil {
-		_, err = tx.Exec("DELETE FROM cart_items WHERE user_id = $1", *userID)
+		_, err = tx.Exec("DELETE FROM orders.cart_items WHERE user_id = $1", *userID)
 	} else if sessionID != nil {
-		_, err = tx.Exec("DELETE FROM guest_cart_items WHERE session_id = $1", *sessionID)
+		_, err = tx.Exec("DELETE FROM orders.guest_cart_items WHERE session_id = $1", *sessionID)
 	}
 
 	if err != nil {
@@ -701,7 +699,7 @@ func getOrderByID(orderID int) (*Order, error) {
 	query := `
 		SELECT id, user_id, session_id, order_number, status, total_amount, payment_status, 
 		       payment_method, shipping_address, billing_address, notes, created_at, updated_at
-		FROM orders 
+		FROM orders.orders 
 		WHERE id = $1
 	`
 
@@ -721,8 +719,8 @@ func getOrderByID(orderID int) (*Order, error) {
 	itemsQuery := `
 		SELECT oi.id, oi.order_id, oi.product_id, oi.quantity, oi.unit_price, oi.total_price,
 		       p.name as product_name, p.slug as product_slug
-		FROM order_items oi
-		JOIN products p ON oi.product_id = p.id
+		FROM orders.order_items oi
+		JOIN catalog.products p ON oi.product_id = p.id
 		WHERE oi.order_id = $1
 	`
 
@@ -754,7 +752,7 @@ func getUserOrders(userID int) ([]Order, error) {
 	query := `
 		SELECT id, user_id, session_id, order_number, status, total_amount, payment_status,
 		       payment_method, shipping_address, billing_address, notes, created_at, updated_at
-		FROM orders 
+		FROM orders.orders 
 		WHERE user_id = $1
 		ORDER BY created_at DESC
 	`
@@ -813,7 +811,7 @@ func updateOrderStatus(orderID int, req *UpdateOrderStatusRequest) error {
 
 	setParts = append(setParts, fmt.Sprintf("updated_at = NOW()"))
 
-	query := fmt.Sprintf("UPDATE orders SET %s WHERE id = $%d", strings.Join(setParts, ", "), argIndex)
+	query := fmt.Sprintf("UPDATE orders.orders SET %s WHERE id = $%d", strings.Join(setParts, ", "), argIndex)
 	args = append(args, orderID)
 
 	_, err := db.Exec(query, args...)
@@ -825,7 +823,7 @@ func getAllOrders() ([]Order, error) {
 	query := `
 		SELECT id, user_id, session_id, order_number, status, total_amount, payment_status,
 		       payment_method, shipping_address, billing_address, notes, created_at, updated_at
-		FROM orders 
+		FROM orders.orders 
 		ORDER BY created_at DESC
 	`
 

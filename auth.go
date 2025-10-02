@@ -98,7 +98,7 @@ func createUser(req *RegisterRequest) (*User, error) {
 
 	// Insert user into database
 	query := `
-		INSERT INTO users (username, email, password_hash, first_name, last_name, phone, role)
+		INSERT INTO auth.users (username, email, password_hash, first_name, last_name, phone, role)
 		VALUES ($1, $2, $3, $4, $5, $6, 'customer')
 		RETURNING id, username, email, first_name, last_name, phone, role, is_active, email_verified, created_at
 	`
@@ -118,7 +118,7 @@ func createUser(req *RegisterRequest) (*User, error) {
 func getUserByEmail(email string) (*User, error) {
 	query := `
 		SELECT id, username, email, password_hash, first_name, last_name, phone, role, is_active, email_verified, created_at
-		FROM users 
+		FROM auth.users 
 		WHERE email = $1 AND is_active = true
 	`
 
@@ -143,7 +143,7 @@ func getUserByEmail(email string) (*User, error) {
 func getUserByID(userID int) (*User, error) {
 	query := `
 		SELECT id, username, email, first_name, last_name, phone, role, is_active, email_verified, created_at
-		FROM users 
+		FROM auth.users 
 		WHERE id = $1 AND is_active = true
 	`
 
