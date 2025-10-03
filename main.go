@@ -57,6 +57,10 @@ func main() {
 	admin.Put("/products/:id", adminUpdateProductHandler)
 	admin.Delete("/products/:id", adminDeleteProductHandler)
 	admin.Get("/products", adminGetProductsHandler)
+	admin.Post("/categories", adminCreateCategoryHandler)
+	admin.Put("/categories/:id", adminUpdateCategoryHandler)
+	admin.Delete("/categories/:id", adminDeleteCategoryHandler)
+	admin.Get("/categories", adminGetCategoriesHandler)
 	admin.Get("/orders", adminGetOrdersHandler)                    // Get all orders
 	admin.Put("/orders/:id/status", adminUpdateOrderStatusHandler) // Update order status
 

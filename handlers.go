@@ -400,6 +400,156 @@ func adminGetProductsHandler(c *fiber.Ctx) error {
 }
 
 // =====================================================
+// ADMIN CATEGORY HANDLERS
+// =====================================================
+
+// Admin: Create new category
+func adminCreateCategoryHandler(c *fiber.Ctx) error {
+	var req CreateCategoryRequest
+
+	// Parse request body
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(400).JSON(fiber.Map{
+			"error": "Invalid request body",
+		})
+	}
+
+	// Basic validation
+	if req.Name == "" || req.Slug == "" {
+		return c.Status(400).JSON(fiber.Map{
+			"error": "Name and slug are required",
+		})
+	}
+
+	// Create category
+	category, err := createCategory(&req)
+	if err != nil {
+		// Check for duplicate slug
+		if strings.Contains(err.Error(), "duplicate key") {
+			return c.Status(409).JSON(fiber.Map{
+				"error": "Category with this slug already exists",
+			})
+		}
+		return c.Status(500).JSON(fiber.Map{
+			"error":   "Failed to create category",
+			"details": err.Error(),
+		})
+	}
+
+	return c.Status(201).JSON(fiber.Map{
+		"message":  "Category created successfully",
+		"category": category,
+	})
+}
+
+// Admin: Update existing category
+func adminUpdateCategoryHandler(c *fiber.Ctx) error {
+	// Get category ID from URL
+	idStr := c.Params("id")
+	id, err := strconv.Atoi(idStr)
+	if err != nil {
+		return c.Status(400).JSON(fiber.Map{
+			"error": "Invalid category ID",
+		})
+	}
+
+	var req UpdateCategoryRequest
+
+	// Parse request body
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(400).JSON(fiber.Map{
+			"error": "Invalid request body",
+		})
+	}
+
+	// Update category
+	category, err := updateCategory(id, &req)
+	if err != nil {
+		if strings.Contains(err.Error(), "no rows") {
+			return c.Status(404).JSON(fiber.Map{
+				"error": "Category not found",
+			})
+		}
+		if strings.Contains(err.Error(), "duplicate key") {
+			return c.Status(409).JSON(fiber.Map{
+				"error": "Category with this slug already exists",
+			})
+		}
+		return c.Status(500).JSON(fiber.Map{
+			"error":   "Failed to update category",
+			"details": err.Error(),
+		})
+	}
+
+	return c.JSON(fiber.Map{
+		"message":  "Category updated successfully",
+		"category": category,
+	})
+}
+
+// Admin: Delete category (soft delete)
+func adminDeleteCategoryHandler(c *fiber.Ctx) error {
+	// Get category ID from URL
+	idStr := c.Params("id")
+	id, err := strconv.Atoi(idStr)
+	if err != nil {
+		return c.Status(400).JSON(fiber.Map{
+			"error": "Invalid category ID",
+		})
+	}
+
+	// Delete category
+	err = deleteCategory(id)
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{
+			"error":   "Failed to delete category",
+			"details": err.Error(),
+		})
+	}
+
+	return c.JSON(fiber.Map{
+		"message": "Category deleted successfully",
+	})
+}
+
+// Admin: Get all categories (including inactive)
+func adminGetCategoriesHandler(c *fiber.Ctx) error {
+	query := `
+		SELECT id, name, slug, description, parent_id, image_url, is_active, sort_order, created_at, updated_at
+		FROM catalog.categories 
+		ORDER BY sort_order, name
+	`
+
+	rows, err := db.Query(query)
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{
+			"error":   "Failed to fetch categories",
+			"details": err.Error(),
+		})
+	}
+	defer rows.Close()
+
+	var categories []Category
+	for rows.Next() {
+		var cat Category
+		err := rows.Scan(&cat.ID, &cat.Name, &cat.Slug, &cat.Description, &cat.ParentID, &cat.ImageURL, &cat.IsActive, &cat.SortOrder, &cat.CreatedAt, &cat.UpdatedAt)
+		if err != nil {
+			return c.Status(500).JSON(fiber.Map{
+				"error":   "Failed to scan categories",
+				"details": err.Error(),
+			})
+		}
+		categories = append(categories, cat)
+	}
+
+	return c.JSON(fiber.Map{
+		"categories": categories,
+		"total":      len(categories),
+		"message":    "All categories (including inactive)",
+	})
+}
+
+// =====================================================
 // CART HANDLERS
 // =====================================================
 

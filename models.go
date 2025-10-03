@@ -20,12 +20,16 @@ type Product struct {
 
 // Category struct to match database
 type Category struct {
-	ID          int    `json:"id"`
-	Name        string `json:"name"`
-	Slug        string `json:"slug"`
-	Description string `json:"description"`
-	ParentID    *int   `json:"parent_id"`
-	IsActive    bool   `json:"is_active"`
+	ID          int       `json:"id"`
+	Name        string    `json:"name"`
+	Slug        string    `json:"slug"`
+	Description string    `json:"description"`
+	ParentID    *int      `json:"parent_id"`
+	ImageURL    string    `json:"image_url"`
+	IsActive    bool      `json:"is_active"`
+	SortOrder   int       `json:"sort_order"`
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
 }
 
 // Get all products from database
@@ -76,7 +80,7 @@ func getProductByID(id int) (*Product, error) {
 // Get all categories from database
 func getCategoriesFromDB() ([]Category, error) {
 	query := `
-		SELECT id, name, slug, description, parent_id, is_active 
+		SELECT id, name, slug, description, parent_id, image_url, is_active, sort_order, created_at, updated_at
 		FROM catalog.categories 
 		WHERE is_active = true 
 		ORDER BY sort_order, name
@@ -91,7 +95,7 @@ func getCategoriesFromDB() ([]Category, error) {
 	var categories []Category
 	for rows.Next() {
 		var c Category
-		err := rows.Scan(&c.ID, &c.Name, &c.Slug, &c.Description, &c.ParentID, &c.IsActive)
+		err := rows.Scan(&c.ID, &c.Name, &c.Slug, &c.Description, &c.ParentID, &c.ImageURL, &c.IsActive, &c.SortOrder, &c.CreatedAt, &c.UpdatedAt)
 		if err != nil {
 			return nil, err
 		}
@@ -99,6 +103,129 @@ func getCategoriesFromDB() ([]Category, error) {
 	}
 
 	return categories, nil
+} // CreateCategoryRequest struct for admin category creation
+type CreateCategoryRequest struct {
+	Name        string `json:"name"`
+	Slug        string `json:"slug"`
+	Description string `json:"description"`
+	ParentID    *int   `json:"parent_id,omitempty"`
+	ImageURL    string `json:"image_url,omitempty"`
+	SortOrder   int    `json:"sort_order"`
+}
+
+// UpdateCategoryRequest struct for category updates
+type UpdateCategoryRequest struct {
+	Name        *string `json:"name,omitempty"`
+	Slug        *string `json:"slug,omitempty"`
+	Description *string `json:"description,omitempty"`
+	ParentID    *int    `json:"parent_id,omitempty"`
+	ImageURL    *string `json:"image_url,omitempty"`
+	IsActive    *bool   `json:"is_active,omitempty"`
+	SortOrder   *int    `json:"sort_order,omitempty"`
+}
+
+// Create new category (admin only)
+func createCategory(req *CreateCategoryRequest) (*Category, error) {
+	query := `
+		INSERT INTO catalog.categories (name, slug, description, parent_id, image_url, sort_order)
+		VALUES ($1, $2, $3, $4, $5, $6)
+		RETURNING id, name, slug, description, parent_id, image_url, is_active, sort_order, created_at, updated_at
+	`
+
+	var category Category
+	err := db.QueryRow(query,
+		req.Name, req.Slug, req.Description, req.ParentID, req.ImageURL, req.SortOrder,
+	).Scan(&category.ID, &category.Name, &category.Slug, &category.Description,
+		&category.ParentID, &category.ImageURL, &category.IsActive, &category.SortOrder,
+		&category.CreatedAt, &category.UpdatedAt)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &category, nil
+}
+
+// Update existing category (admin only)
+func updateCategory(id int, req *UpdateCategoryRequest) (*Category, error) {
+	// Build dynamic query based on provided fields
+	setParts := []string{}
+	args := []interface{}{}
+	argIndex := 1
+
+	if req.Name != nil {
+		setParts = append(setParts, fmt.Sprintf("name = $%d", argIndex))
+		args = append(args, *req.Name)
+		argIndex++
+	}
+	if req.Slug != nil {
+		setParts = append(setParts, fmt.Sprintf("slug = $%d", argIndex))
+		args = append(args, *req.Slug)
+		argIndex++
+	}
+	if req.Description != nil {
+		setParts = append(setParts, fmt.Sprintf("description = $%d", argIndex))
+		args = append(args, *req.Description)
+		argIndex++
+	}
+	if req.ParentID != nil {
+		setParts = append(setParts, fmt.Sprintf("parent_id = $%d", argIndex))
+		args = append(args, *req.ParentID)
+		argIndex++
+	}
+	if req.ImageURL != nil {
+		setParts = append(setParts, fmt.Sprintf("image_url = $%d", argIndex))
+		args = append(args, *req.ImageURL)
+		argIndex++
+	}
+	if req.IsActive != nil {
+		setParts = append(setParts, fmt.Sprintf("is_active = $%d", argIndex))
+		args = append(args, *req.IsActive)
+		argIndex++
+	}
+	if req.SortOrder != nil {
+		setParts = append(setParts, fmt.Sprintf("sort_order = $%d", argIndex))
+		args = append(args, *req.SortOrder)
+		argIndex++
+	}
+
+	if len(setParts) == 0 {
+		return nil, fmt.Errorf("no fields to update")
+	}
+
+	// Add updated_at
+	setParts = append(setParts, fmt.Sprintf("updated_at = $%d", argIndex))
+	args = append(args, time.Now())
+	argIndex++
+
+	// Add ID for WHERE clause
+	args = append(args, id)
+
+	query := fmt.Sprintf(`
+		UPDATE catalog.categories 
+		SET %s 
+		WHERE id = $%d 
+		RETURNING id, name, slug, description, parent_id, image_url, is_active, sort_order, created_at, updated_at
+	`, strings.Join(setParts, ", "), argIndex)
+
+	var category Category
+	err := db.QueryRow(query, args...).Scan(
+		&category.ID, &category.Name, &category.Slug, &category.Description,
+		&category.ParentID, &category.ImageURL, &category.IsActive, &category.SortOrder,
+		&category.CreatedAt, &category.UpdatedAt)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &category, nil
+}
+
+// Delete category (admin only) - soft delete
+func deleteCategory(id int) error {
+	query := `UPDATE catalog.categories SET is_active = false, updated_at = NOW() WHERE id = $1`
+	_, err := db.Exec(query, id)
+	return err
 }
 
 // CreateProductRequest struct for admin product creation
