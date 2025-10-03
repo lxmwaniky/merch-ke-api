@@ -550,6 +550,132 @@ func adminGetCategoriesHandler(c *fiber.Ctx) error {
 }
 
 // =====================================================
+// PRODUCT IMAGE HANDLERS
+// =====================================================
+
+// Create product image (admin only)
+func adminCreateProductImageHandler(c *fiber.Ctx) error {
+	// Parse product ID from URL
+	productID := c.Params("productId")
+	prodID, err := strconv.Atoi(productID)
+	if err != nil {
+		return c.Status(400).JSON(fiber.Map{
+			"error": "Invalid product ID",
+		})
+	}
+
+	var req ProductImageRequest
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(400).JSON(fiber.Map{
+			"error": "Invalid request body",
+		})
+	}
+
+	// Validation
+	if req.ImageURL == "" {
+		return c.Status(400).JSON(fiber.Map{
+			"error": "Image URL is required",
+		})
+	}
+
+	// Create the image
+	image, err := createProductImage(prodID, nil, &req)
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{
+			"error":   "Failed to create product image",
+			"details": err.Error(),
+		})
+	}
+
+	return c.Status(201).JSON(fiber.Map{
+		"message": "Product image created successfully",
+		"image":   image,
+	})
+}
+
+// Get product images
+func getProductImagesHandler(c *fiber.Ctx) error {
+	// Parse product ID from URL
+	productID := c.Params("productId")
+	prodID, err := strconv.Atoi(productID)
+	if err != nil {
+		return c.Status(400).JSON(fiber.Map{
+			"error": "Invalid product ID",
+		})
+	}
+
+	images, err := getProductImages(prodID)
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{
+			"error":   "Failed to get product images",
+			"details": err.Error(),
+		})
+	}
+
+	return c.JSON(fiber.Map{
+		"images": images,
+		"total":  len(images),
+	})
+}
+
+// Update product image (admin only)
+func adminUpdateProductImageHandler(c *fiber.Ctx) error {
+	// Parse image ID from URL
+	imageID := c.Params("imageId")
+	imgID, err := strconv.Atoi(imageID)
+	if err != nil {
+		return c.Status(400).JSON(fiber.Map{
+			"error": "Invalid image ID",
+		})
+	}
+
+	var req ProductImageRequest
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(400).JSON(fiber.Map{
+			"error": "Invalid request body",
+		})
+	}
+
+	// Update the image
+	image, err := updateProductImage(imgID, &req)
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{
+			"error":   "Failed to update product image",
+			"details": err.Error(),
+		})
+	}
+
+	return c.JSON(fiber.Map{
+		"message": "Product image updated successfully",
+		"image":   image,
+	})
+}
+
+// Delete product image (admin only)
+func adminDeleteProductImageHandler(c *fiber.Ctx) error {
+	// Parse image ID from URL
+	imageID := c.Params("imageId")
+	imgID, err := strconv.Atoi(imageID)
+	if err != nil {
+		return c.Status(400).JSON(fiber.Map{
+			"error": "Invalid image ID",
+		})
+	}
+
+	err = deleteProductImage(imgID)
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{
+			"error":   "Failed to delete product image",
+			"details": err.Error(),
+		})
+	}
+
+	return c.JSON(fiber.Map{
+		"message": "Product image deleted successfully",
+	})
+}
+
+// =====================================================
 // CART HANDLERS
 // =====================================================
 

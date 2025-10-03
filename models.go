@@ -8,14 +8,62 @@ import (
 
 // Product struct to match database
 type Product struct {
-	ID          int     `json:"id"`
-	Name        string  `json:"name"`
-	Slug        string  `json:"slug"`
-	Description string  `json:"description"`
-	CategoryID  int     `json:"category_id"`
-	BasePrice   float64 `json:"base_price"`
-	IsActive    bool    `json:"is_active"`
-	IsFeatured  bool    `json:"is_featured"`
+	ID               int       `json:"id"`
+	Name             string    `json:"name"`
+	Slug             string    `json:"slug"`
+	Description      string    `json:"description"`
+	ShortDescription string    `json:"short_description"`
+	CategoryID       int       `json:"category_id"`
+	BasePrice        float64   `json:"base_price"`
+	SKUPrefix        string    `json:"sku_prefix"`
+	IsActive         bool      `json:"is_active"`
+	IsFeatured       bool      `json:"is_featured"`
+	Weight           float64   `json:"weight"`
+	Dimensions       string    `json:"dimensions"`
+	CreatedAt        time.Time `json:"created_at"`
+	UpdatedAt        time.Time `json:"updated_at"`
+}
+
+// ProductImage struct for product images
+type ProductImage struct {
+	ID           int    `json:"id"`
+	ProductID    int    `json:"product_id"`
+	VariantID    *int   `json:"variant_id"`
+	ImageURL     string `json:"image_url"`
+	ImagePath    string `json:"image_path"`
+	ImageType    string `json:"image_type"`
+	AltText      string `json:"alt_text"`
+	DisplayOrder int    `json:"display_order"`
+	FileSize     int    `json:"file_size"`
+	Width        int    `json:"width"`
+	Height       int    `json:"height"`
+	IsPrimary    bool   `json:"is_primary"`
+	CreatedAt    string `json:"created_at"`
+}
+
+// ProductImageRequest struct for creating images
+type ProductImageRequest struct {
+	ImageURL     string `json:"image_url"`
+	ImagePath    string `json:"image_path,omitempty"`
+	ImageType    string `json:"image_type,omitempty"`
+	AltText      string `json:"alt_text,omitempty"`
+	DisplayOrder int    `json:"display_order,omitempty"`
+	IsPrimary    bool   `json:"is_primary,omitempty"`
+}
+
+// CreateProductRequest struct for admin product creation
+type CreateProductRequest struct {
+	Name             string                `json:"name"`
+	Slug             string                `json:"slug"`
+	Description      string                `json:"description"`
+	ShortDescription string                `json:"short_description"`
+	CategoryID       int                   `json:"category_id"`
+	BasePrice        float64               `json:"base_price"`
+	SKUPrefix        string                `json:"sku_prefix"`
+	IsFeatured       bool                  `json:"is_featured"`
+	Weight           float64               `json:"weight"`
+	Dimensions       string                `json:"dimensions"`
+	Images           []ProductImageRequest `json:"images,omitempty"`
 }
 
 // Category struct to match database
@@ -228,18 +276,83 @@ func deleteCategory(id int) error {
 	return err
 }
 
-// CreateProductRequest struct for admin product creation
-type CreateProductRequest struct {
-	Name             string  `json:"name"`
-	Slug             string  `json:"slug"`
-	Description      string  `json:"description"`
-	ShortDescription string  `json:"short_description"`
-	CategoryID       int     `json:"category_id"`
-	BasePrice        float64 `json:"base_price"`
-	SKUPrefix        string  `json:"sku_prefix"`
-	IsFeatured       bool    `json:"is_featured"`
-	Weight           float64 `json:"weight"`
-	Dimensions       string  `json:"dimensions"`
+// =====================================================
+// PRODUCT IMAGE FUNCTIONS
+// =====================================================
+
+// Create product image
+func createProductImage(productID int, variantID *int, req *ProductImageRequest) (*ProductImage, error) {
+	query := `
+		INSERT INTO catalog.product_images (product_id, variant_id, image_url, image_path, image_type, alt_text, display_order, is_primary)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		RETURNING id, product_id, variant_id, image_url, image_path, image_type, alt_text, display_order, file_size, width, height, is_primary, created_at
+	`
+
+	var image ProductImage
+	err := db.QueryRow(query, productID, variantID, req.ImageURL, req.ImagePath, req.ImageType, req.AltText, req.DisplayOrder, req.IsPrimary).Scan(
+		&image.ID, &image.ProductID, &image.VariantID, &image.ImageURL, &image.ImagePath, &image.ImageType,
+		&image.AltText, &image.DisplayOrder, &image.FileSize, &image.Width, &image.Height, &image.IsPrimary, &image.CreatedAt)
+	if err != nil {
+		return nil, err
+	}
+
+	return &image, nil
+}
+
+// Get product images by product ID
+func getProductImages(productID int) ([]ProductImage, error) {
+	query := `
+		SELECT id, product_id, variant_id, image_url, image_path, image_type, alt_text, display_order, file_size, width, height, is_primary, created_at
+		FROM catalog.product_images 
+		WHERE product_id = $1 
+		ORDER BY display_order ASC, is_primary DESC, created_at ASC
+	`
+
+	rows, err := db.Query(query, productID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var images []ProductImage
+	for rows.Next() {
+		var img ProductImage
+		err := rows.Scan(&img.ID, &img.ProductID, &img.VariantID, &img.ImageURL, &img.ImagePath, &img.ImageType,
+			&img.AltText, &img.DisplayOrder, &img.FileSize, &img.Width, &img.Height, &img.IsPrimary, &img.CreatedAt)
+		if err != nil {
+			return nil, err
+		}
+		images = append(images, img)
+	}
+
+	return images, nil
+}
+
+// Update product image
+func updateProductImage(id int, req *ProductImageRequest) (*ProductImage, error) {
+	query := `
+		UPDATE catalog.product_images 
+		SET image_url = $2, image_path = $3, image_type = $4, alt_text = $5, display_order = $6, is_primary = $7
+		WHERE id = $1
+		RETURNING id, product_id, variant_id, image_url, image_path, image_type, alt_text, display_order, file_size, width, height, is_primary, created_at
+	`
+
+	var image ProductImage
+	err := db.QueryRow(query, id, req.ImageURL, req.ImagePath, req.ImageType, req.AltText, req.DisplayOrder, req.IsPrimary).Scan(
+		&image.ID, &image.ProductID, &image.VariantID, &image.ImageURL, &image.ImagePath, &image.ImageType,
+		&image.AltText, &image.DisplayOrder, &image.FileSize, &image.Width, &image.Height, &image.IsPrimary, &image.CreatedAt)
+	if err != nil {
+		return nil, err
+	}
+
+	return &image, nil
+}
+
+// Delete product image
+func deleteProductImage(id int) error {
+	query := `DELETE FROM catalog.product_images WHERE id = $1`
+	_, err := db.Exec(query, id)
+	return err
 }
 
 // UpdateProductRequest struct for product updates

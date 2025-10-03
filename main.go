@@ -25,6 +25,7 @@ func main() {
 	app.Get("/health", healthHandler)
 	app.Get("/api/products", productsHandler)
 	app.Get("/api/products/:id", singleProductHandler)
+	app.Get("/api/products/:productId/images", getProductImagesHandler) // Get product images
 	app.Get("/api/categories", categoriesHandler)
 
 	// Authentication routes
@@ -61,8 +62,12 @@ func main() {
 	admin.Put("/categories/:id", adminUpdateCategoryHandler)
 	admin.Delete("/categories/:id", adminDeleteCategoryHandler)
 	admin.Get("/categories", adminGetCategoriesHandler)
-	admin.Get("/orders", adminGetOrdersHandler)                    // Get all orders
-	admin.Put("/orders/:id/status", adminUpdateOrderStatusHandler) // Update order status
+	// Product image management
+	admin.Post("/products/:productId/images", adminCreateProductImageHandler) // Create product image
+	admin.Put("/images/:imageId", adminUpdateProductImageHandler)             // Update product image
+	admin.Delete("/images/:imageId", adminDeleteProductImageHandler)          // Delete product image
+	admin.Get("/orders", adminGetOrdersHandler)                               // Get all orders
+	admin.Put("/orders/:id/status", adminUpdateOrderStatusHandler)            // Update order status
 
 	log.Println("🚀 Merch Ke API starting on http://localhost:8080")
 	log.Fatal(app.Listen("0.0.0.0:8080"))
