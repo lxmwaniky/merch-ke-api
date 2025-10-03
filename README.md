@@ -17,7 +17,8 @@
 - Soft deletion for data integrity
 
 ### 🏪 Store Management
-- Category management system
+- **Complete category management system**
+- **Admin category CRUD operations**
 - Product search and filtering
 - Inventory management
 - Price management
