@@ -47,8 +47,14 @@
 - Order management
 - Coupon code generation
 
+### 🏗️ Database Architecture
+- Multi-schema PostgreSQL design
+- Organized into `auth`, `catalog`, and `orders` schemas
+- Enterprise-grade structure with proper indexing
+- Schema-level security and permissions
+
 ---
 
-**Tech Stack:** Go, Fiber, PostgreSQL, JWT
+**Tech Stack:** Go, Fiber, PostgreSQL (Multi-Schema), JWT
 
 **Status:** In Development 🚧
