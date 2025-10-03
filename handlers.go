@@ -284,7 +284,7 @@ func adminCreateProductHandler(c *fiber.Ctx) error {
 			if imageReq.ImageURL == "" {
 				continue // Skip invalid images
 			}
-			
+
 			image, err := createProductImage(product.ID, nil, &imageReq)
 			if err != nil {
 				// Log the error but don't fail the entire request
@@ -300,7 +300,7 @@ func adminCreateProductHandler(c *fiber.Ctx) error {
 		"message": "Product created successfully",
 		"product": product,
 	}
-	
+
 	if len(createdImages) > 0 {
 		response["images"] = createdImages
 		response["images_created"] = len(createdImages)
