@@ -276,10 +276,37 @@ func adminCreateProductHandler(c *fiber.Ctx) error {
 		})
 	}
 
-	return c.Status(201).JSON(fiber.Map{
+	// Create images if provided
+	var createdImages []ProductImage
+	if len(req.Images) > 0 {
+		for _, imageReq := range req.Images {
+			// Validate each image request
+			if imageReq.ImageURL == "" {
+				continue // Skip invalid images
+			}
+			
+			image, err := createProductImage(product.ID, nil, &imageReq)
+			if err != nil {
+				// Log the error but don't fail the entire request
+				log.Printf("Failed to create image for product %d: %v", product.ID, err)
+				continue
+			}
+			createdImages = append(createdImages, *image)
+		}
+	}
+
+	// Response includes product and created images
+	response := fiber.Map{
 		"message": "Product created successfully",
 		"product": product,
-	})
+	}
+	
+	if len(createdImages) > 0 {
+		response["images"] = createdImages
+		response["images_created"] = len(createdImages)
+	}
+
+	return c.Status(201).JSON(response)
 }
 
 // Admin: Update existing product
