@@ -51,7 +51,17 @@ Thumbs.db
 build/
 dist/
 bin/
-docs/
 
 # Temporary files
 temp_*
+
+# Google Cloud & Deployment
+.gcloudignore
+gcp-service-account.json
+*-key.json
+deploy/secrets/
+deploy/*.env
+
+# Kubernetes
+k8s/secrets/
+*.secret.yaml
