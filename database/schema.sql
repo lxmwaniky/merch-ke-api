@@ -151,6 +151,8 @@ CREATE TABLE orders.orders (
     shipping_amount DECIMAL(10,2) DEFAULT 0.00,
     discount_amount DECIMAL(10,2) DEFAULT 0.00,
     total_amount DECIMAL(10,2) NOT NULL,
+    shipping_address TEXT,
+    billing_address TEXT,
     shipping_first_name VARCHAR(100),
     shipping_last_name VARCHAR(100),
     shipping_company VARCHAR(100),
