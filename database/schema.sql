@@ -140,6 +140,7 @@ CREATE TABLE auth.points_transactions (
 CREATE TABLE orders.orders (
     id SERIAL PRIMARY KEY,
     user_id INTEGER REFERENCES auth.users(id),
+    session_id VARCHAR(255),
     order_number VARCHAR(50) UNIQUE NOT NULL,
     status VARCHAR(20) DEFAULT 'pending',
     payment_status VARCHAR(20) DEFAULT 'pending',
@@ -230,6 +231,7 @@ CREATE INDEX idx_auth_points_transactions_order ON auth.points_transactions(orde
 
 -- Orders indexes
 CREATE INDEX idx_orders_user ON orders.orders(user_id);
+CREATE INDEX idx_orders_session ON orders.orders(session_id);
 CREATE INDEX idx_orders_status ON orders.orders(status);
 CREATE INDEX idx_orders_ordered_at ON orders.orders(ordered_at);
 
