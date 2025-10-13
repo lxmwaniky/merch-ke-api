@@ -130,9 +130,9 @@ func TestGenerateJWT(t *testing.T) {
 	}
 }
 
-// TestGenerateJWTNoSecret tests JWT generation without secret
-func TestGenerateJWTNoSecret(t *testing.T) {
-	// Ensure JWT_SECRET is not set
+// TestGenerateJWTWithDefaultSecret tests JWT generation uses default secret when env var not set
+func TestGenerateJWTWithDefaultSecret(t *testing.T) {
+	// Ensure JWT_SECRET is not set (will use default)
 	os.Unsetenv("JWT_SECRET")
 
 	user := &User{
@@ -142,9 +142,13 @@ func TestGenerateJWTNoSecret(t *testing.T) {
 		Role:     "customer",
 	}
 
-	_, err := generateJWT(user)
-	if err == nil {
-		t.Error("Expected error when JWT_SECRET is not set")
+	token, err := generateJWT(user)
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+
+	if token == "" {
+		t.Error("Token should not be empty")
 	}
 }
 

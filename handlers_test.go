@@ -237,14 +237,9 @@ func TestAdminMiddlewareNoAdmin(t *testing.T) {
 
 	app := fiber.New()
 
-	// Mock middleware that sets a non-admin user
+	// Mock middleware that sets role as customer (not admin)
 	app.Use(func(c *fiber.Ctx) error {
-		c.Locals("user", &User{
-			ID:       1,
-			Username: "testuser",
-			Email:    "test@example.com",
-			Role:     "customer", // Not admin
-		})
+		c.Locals("role", "customer") // Set role, not user object
 		return c.Next()
 	})
 
@@ -261,6 +256,35 @@ func TestAdminMiddlewareNoAdmin(t *testing.T) {
 
 	if resp.StatusCode != 403 {
 		t.Errorf("Status code = %d, want 403", resp.StatusCode)
+	}
+}
+
+// TestAdminMiddlewareWithAdmin tests admin middleware with admin user
+func TestAdminMiddlewareWithAdmin(t *testing.T) {
+	os.Setenv("JWT_SECRET", "test-secret-key-for-unit-testing-purposes-only")
+	defer os.Unsetenv("JWT_SECRET")
+
+	app := fiber.New()
+
+	// Mock middleware that sets role as admin
+	app.Use(func(c *fiber.Ctx) error {
+		c.Locals("role", "admin")
+		return c.Next()
+	})
+
+	app.Get("/api/admin/test", adminMiddleware, func(c *fiber.Ctx) error {
+		return c.JSON(fiber.Map{"message": "admin access granted"})
+	})
+
+	req := httptest.NewRequest("GET", "/api/admin/test", nil)
+	resp, err := app.Test(req)
+
+	if err != nil {
+		t.Fatalf("Failed to make request: %v", err)
+	}
+
+	if resp.StatusCode != 200 {
+		t.Errorf("Status code = %d, want 200", resp.StatusCode)
 	}
 }
 
