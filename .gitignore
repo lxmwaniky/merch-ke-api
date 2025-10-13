@@ -65,3 +65,6 @@ deploy/*.env
 # Kubernetes
 k8s/secrets/
 *.secret.yaml
+
+# Private API Documentation (for internal frontend team only)
+docs/
