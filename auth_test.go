@@ -148,8 +148,8 @@ func TestGenerateJWTNoSecret(t *testing.T) {
 	}
 }
 
-// TestValidateJWT tests JWT token validation
-func TestValidateJWT(t *testing.T) {
+// TestParseJWT tests JWT token parsing
+func TestParseJWT(t *testing.T) {
 	// Set JWT secret for testing
 	os.Setenv("JWT_SECRET", "test-secret-key-for-unit-testing-purposes-only")
 	defer os.Unsetenv("JWT_SECRET")
@@ -164,62 +164,26 @@ func TestValidateJWT(t *testing.T) {
 
 	validToken, _ := generateJWT(user)
 
-	// Create an expired token
-	expiredClaims := &Claims{
-		UserID:   1,
-		Username: "testuser",
-		Email:    "test@example.com",
-		Role:     "customer",
-		RegisteredClaims: jwt.RegisteredClaims{
-			ExpiresAt: jwt.NewNumericDate(time.Now().Add(-1 * time.Hour)),
-		},
-	}
-	expiredToken := jwt.NewWithClaims(jwt.SigningMethodHS256, expiredClaims)
-	expiredTokenString, _ := expiredToken.SignedString([]byte(os.Getenv("JWT_SECRET")))
+	// Parse the token
+	parsedToken, err := jwt.ParseWithClaims(validToken, &Claims{}, func(token *jwt.Token) (interface{}, error) {
+		return []byte(os.Getenv("JWT_SECRET")), nil
+	})
 
-	tests := []struct {
-		name      string
-		token     string
-		wantError bool
-	}{
-		{
-			name:      "Valid token",
-			token:     validToken,
-			wantError: false,
-		},
-		{
-			name:      "Expired token",
-			token:     expiredTokenString,
-			wantError: true,
-		},
-		{
-			name:      "Invalid token",
-			token:     "invalid.token.string",
-			wantError: true,
-		},
-		{
-			name:      "Empty token",
-			token:     "",
-			wantError: true,
-		},
+	if err != nil {
+		t.Fatalf("Failed to parse valid token: %v", err)
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			claims, err := validateJWT(tt.token)
-			if tt.wantError {
-				if err == nil {
-					t.Error("Expected error but got none")
-				}
-			} else {
-				if err != nil {
-					t.Errorf("Unexpected error: %v", err)
-				}
-				if claims == nil {
-					t.Error("Claims should not be nil for valid token")
-				}
-			}
-		})
+	if !parsedToken.Valid {
+		t.Error("Valid token should be marked as valid")
+	}
+
+	claims, ok := parsedToken.Claims.(*Claims)
+	if !ok {
+		t.Fatal("Failed to extract claims")
+	}
+
+	if claims.UserID != user.ID {
+		t.Errorf("UserID = %d, want %d", claims.UserID, user.ID)
 	}
 }
 

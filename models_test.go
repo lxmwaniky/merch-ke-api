@@ -122,14 +122,15 @@ func TestCategoryStruct(t *testing.T) {
 
 // TestOrderStruct tests the Order struct
 func TestOrderStruct(t *testing.T) {
+	userId := 1
 	order := Order{
 		ID:          123,
 		OrderNumber: "ORD-20251013-0123",
-		UserID:      1,
+		UserID:      &userId,
 		TotalAmount: 6500.00,
 		Status:      "pending",
-		CreatedAt:   time.Now(),
-		UpdatedAt:   time.Now(),
+		CreatedAt:   time.Now().Format(time.RFC3339),
+		UpdatedAt:   time.Now().Format(time.RFC3339),
 	}
 
 	if order.ID != 123 {
@@ -140,8 +141,8 @@ func TestOrderStruct(t *testing.T) {
 		t.Errorf("OrderNumber = %s, want ORD-20251013-0123", order.OrderNumber)
 	}
 
-	if order.UserID != 1 {
-		t.Errorf("UserID = %d, want 1", order.UserID)
+	if order.UserID == nil || *order.UserID != 1 {
+		t.Errorf("UserID = %v, want 1", order.UserID)
 	}
 
 	if order.TotalAmount != 6500.00 {
@@ -155,21 +156,20 @@ func TestOrderStruct(t *testing.T) {
 
 // TestCartItemStruct tests the CartItem struct
 func TestCartItemStruct(t *testing.T) {
+	userId := 1
 	cartItem := CartItem{
 		ID:        1,
-		UserID:    1,
+		UserID:    &userId,
 		ProductID: 10,
 		Quantity:  2,
-		CreatedAt: time.Now(),
-		UpdatedAt: time.Now(),
 	}
 
 	if cartItem.ID != 1 {
 		t.Errorf("ID = %d, want 1", cartItem.ID)
 	}
 
-	if cartItem.UserID != 1 {
-		t.Errorf("UserID = %d, want 1", cartItem.UserID)
+	if cartItem.UserID == nil || *cartItem.UserID != 1 {
+		t.Errorf("UserID = %v, want 1", cartItem.UserID)
 	}
 
 	if cartItem.ProductID != 10 {
