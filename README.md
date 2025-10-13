@@ -46,6 +46,8 @@ merch-ke-api/
 ├── go.sum                  # Dependency checksums
 ├── .env.example            # Environment variables template
 ├── .gitignore              # Git ignore rules
+├── TESTING.md              # Testing documentation and guidelines
+├── *_test.go               # Unit tests for auth, models, and handlers
 └── database/
     └── schema.sql          # Complete database schema with multi-schema design
 ```
@@ -146,6 +148,43 @@ Expected response:
 ```json
 {
   "status": "healthy",
+  "service": "Merch Ke API"
+}
+```
+
+### 7. Run Tests
+
+Run the unit tests to verify everything is working:
+
+```bash
+# Run all tests
+go test ./...
+
+# Run with verbose output
+go test -v ./...
+
+# Run with coverage
+go test -cover ./...
+```
+
+All tests should pass ✅ See [TESTING.md](TESTING.md) for detailed testing documentation.
+
+---
+
+## 🧪 Testing
+
+This project includes comprehensive unit tests covering:
+- Authentication & JWT token generation
+- Password hashing and verification
+- Data models and validation
+- HTTP handlers and middleware
+- Input validation and error handling
+
+**Current Coverage**: 3.8% (unit tests for core functionality)
+
+Run tests:
+```bash
+go test -v ./...
   "service": "Merch Ke API"
 }
 ```
