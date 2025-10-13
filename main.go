@@ -2,6 +2,7 @@ package main
 
 import (
 	"log"
+	"os"
 	"strconv"
 
 	"github.com/gofiber/fiber/v2"
@@ -69,8 +70,14 @@ func main() {
 	admin.Get("/orders", adminGetOrdersHandler)                               // Get all orders
 	admin.Put("/orders/:id/status", adminUpdateOrderStatusHandler)            // Update order status
 
-	log.Println("🚀 Merch Ke API starting on http://localhost:8080")
-	log.Fatal(app.Listen("0.0.0.0:8080"))
+	// Get port from environment variable (Cloud Run sets this)
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080" // default for local development
+	}
+
+	log.Printf("🚀 Merch Ke API starting on port %s", port)
+	log.Fatal(app.Listen("0.0.0.0:" + port))
 }
 
 func healthHandler(c *fiber.Ctx) error {
