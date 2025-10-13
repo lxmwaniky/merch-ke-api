@@ -1,47 +1,45 @@
-# 🚀 Merch Ke API - Postman Testing Guide
+# Merch Ke API Documentation
 
-## 📋 Prerequisites
+> **For Frontend Teams**: Complete API reference with request/response examples for building the Merch Ke frontend application.
 
-### 1. **Database Setup**
-Before testing, ensure your PostgreSQL database is running and properly set up:
+## 🌐 Base URL
 
-```bash
-# Create database and user (if not done already)
-psql -U postgres
-CREATE DATABASE "merch-ke-db";
-CREATE USER "merch-ke-admin" WITH PASSWORD 'merch-ke-password';
-GRANT ALL PRIVILEGES ON DATABASE "merch-ke-db" TO "merch-ke-admin";
+**Production API**: `https://merch-ke-api-779644650318.us-central1.run.app`
+
+All endpoints should be prefixed with this base URL.
+
+Example:
+```
+GET https://merch-ke-api-779644650318.us-central1.run.app/health
 ```
 
-Run the schema file (creates multi-schema architecture):
-```bash
-psql -U merch-ke-admin -d merch-ke-db -f database/schema.sql
+## 🔑 Authentication
+
+Most endpoints require authentication via JWT tokens. After registering or logging in, include the token in your requests:
+
+```
+Authorization: Bearer <your-jwt-token>
 ```
 
-**📊 Database Schema Structure:**
-The API now uses a multi-schema architecture for better organization:
-- **`auth`** schema: User authentication, addresses, points
-- **`catalog`** schema: Products, categories, variants, images  
-- **`orders`** schema: Orders, cart items, order items
+### Guest Users
 
-### 2. **Environment Variables**
-Make sure your `.env` file is configured properly:
-```env
-DB_HOST=localhost
-DB_PORT=5432
-DB_USER=merch-ke-admin
-DB_PASSWORD=merch-ke-password
-DB_NAME=merch-ke-db
-DB_SSLMODE=disable
-JWT_SECRET=your-super-secret-jwt-key-change-this-in-production
+For guest (non-authenticated) users accessing the shopping cart, include a session identifier:
+
+```
+X-Session-ID: <unique-session-id>
 ```
 
-### 3. **Start the Server**
-```bash
-go run .
-```
+Generate this on the frontend (e.g., UUID) and persist it in localStorage/cookies until the user registers or logs in.
 
-Server should start on: `http://localhost:8080`
+## 📊 Database Schema Overview
+
+The API uses a multi-schema PostgreSQL architecture:
+
+| Schema | Tables | Purpose |
+|--------|--------|---------|
+| `auth` | users, user_addresses, user_points, points_transactions | Authentication and user management |
+| `catalog` | products, categories, product_variants, product_images | Product catalog and categorization |
+| `orders` | cart_items, guest_cart_items, orders, order_items | Shopping cart and order management |
 
 ---
 
@@ -68,26 +66,50 @@ Server should start on: `http://localhost:8080`
 
 ---
 
-## ✅ **Testing Progress Tracker**
+## 📑 Table of Contents
 
-**How to use:** Mark checkboxes as you complete each test case:
-- `- [ ]` = Not tested yet
-- `- [x]` = Test completed (click the checkbox in preview mode)
-
-**Legend:**
-- 🟢 = Success test (should return 200/201)  
-- 🔴 = Error test (should return 4xx/5xx)
+1. [Health Check](#health-check)
+2. [Authentication](#authentication-endpoints)
+   - Register
+   - Login
+   - Get Profile
+3. [Product Catalog](#product-catalog-endpoints)
+   - List Products
+   - Get Single Product
+   - List Categories
+   - Get Product Images
+4. [Shopping Cart](#shopping-cart-endpoints)
+   - Add to Cart
+   - Get Cart
+   - Update Cart Item
+   - Remove from Cart
+   - Migrate Guest Cart
+5. [Orders](#order-endpoints)
+   - Create Order
+   - Get Order Details
+   - List User Orders
+6. [Loyalty Points](#loyalty-points-endpoints)
+   - Get User Points
+7. [Admin Endpoints](#admin-endpoints)
+   - Product Management
+   - Category Management
+   - Image Management
+   - Order Management
 
 ---
 
-## 🧪 Testing Scenarios & Test Cases
+## Health Check
 
-### **Phase 1: Basic API Health Check**
+### GET /health
 
-#### 🟢 **Test 1: Health Check** - [ ]
-- **Method:** `GET`
-- **URL:** `http://localhost:8080/health`
-- **Expected Response:**
+Check if the API is running and healthy.
+
+**Request:**
+```http
+GET /health
+```
+
+**Response:** `200 OK`
 ```json
 {
   "status": "healthy",
@@ -97,9 +119,1051 @@ Server should start on: `http://localhost:8080`
 
 ---
 
-### **Phase 2: Authentication Testing**
+## Authentication Endpoints
 
-#### 🟢 **Test 2: User Registration** - [ ]
+### POST /api/auth/register
+
+Create a new user account.
+
+**Request:**
+```http
+POST /api/auth/register
+Content-Type: application/json
+```
+
+**Body:**
+```json
+{
+  "username": "johndoe",
+  "email": "john@example.com",
+  "password": "SecurePass123!",
+  "first_name": "John",
+  "last_name": "Doe",
+  "phone": "+254712345678"
+}
+```
+
+**Response:** `201 Created`
+```json
+{
+  "message": "User registered successfully",
+  "user": {
+    "id": 1,
+    "username": "johndoe",
+    "email": "john@example.com",
+    "first_name": "John",
+    "last_name": "Doe",
+    "phone": "+254712345678",
+    "role": "customer",
+    "is_active": true,
+    "email_verified": false,
+    "created_at": "2025-10-13T09:00:00Z"
+  },
+  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+}
+```
+
+**Errors:**
+- `409 Conflict` - Email or username already exists
+- `400 Bad Request` - Invalid input data
+
+---
+
+### POST /api/auth/login
+
+Authenticate and receive a JWT token.
+
+**Request:**
+```http
+POST /api/auth/login
+Content-Type: application/json
+```
+
+**Body:**
+```json
+{
+  "email": "john@example.com",
+  "password": "SecurePass123!"
+}
+```
+
+**Response:** `200 OK`
+```json
+{
+  "message": "Login successful",
+  "user": {
+    "id": 1,
+    "username": "johndoe",
+    "email": "john@example.com",
+    "first_name": "John",
+    "last_name": "Doe",
+    "phone": "+254712345678",
+    "role": "customer",
+    "is_active": true,
+    "email_verified": false,
+    "created_at": "2025-10-13T09:00:00Z"
+  },
+  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+}
+```
+
+**Errors:**
+- `401 Unauthorized` - Invalid credentials
+- `400 Bad Request` - Missing email or password
+
+---
+
+### GET /api/auth/profile
+
+Get the authenticated user's profile information.
+
+**Request:**
+```http
+GET /api/auth/profile
+Authorization: Bearer <jwt-token>
+```
+
+**Response:** `200 OK`
+```json
+{
+  "user": {
+    "id": 1,
+    "username": "johndoe",
+    "email": "john@example.com",
+    "first_name": "John",
+    "last_name": "Doe",
+    "phone": "+254712345678",
+    "role": "customer",
+    "is_active": true,
+    "email_verified": false,
+    "created_at": "2025-10-13T09:00:00Z"
+  }
+}
+```
+
+**Errors:**
+- `401 Unauthorized` - Missing or invalid token
+
+---
+
+## Product Catalog Endpoints
+
+### GET /api/products
+
+Retrieve all active products.
+
+**Request:**
+```http
+GET /api/products
+```
+
+**Response:** `200 OK`
+```json
+{
+  "products": [
+    {
+      "id": 1,
+      "name": "Go Gopher T-Shirt",
+      "slug": "go-gopher-tshirt",
+      "description": "Official Go programming language mascot t-shirt",
+      "category_id": 5,
+      "base_price": 1500.00,
+      "is_active": true,
+      "is_featured": false,
+      "created_at": "2025-10-10T10:00:00Z"
+    },
+    {
+      "id": 2,
+      "name": "Docker Whale Hoodie",
+      "slug": "docker-whale-hoodie",
+      "description": "Comfortable hoodie with Docker logo",
+      "category_id": 5,
+      "base_price": 3500.00,
+      "is_active": true,
+      "is_featured": true,
+      "created_at": "2025-10-11T14:30:00Z"
+    }
+  ],
+  "total": 2
+}
+```
+
+---
+
+### GET /api/products/:id
+
+Get detailed information about a single product.
+
+**Request:**
+```http
+GET /api/products/1
+```
+
+**Response:** `200 OK`
+```json
+{
+  "id": 1,
+  "name": "Go Gopher T-Shirt",
+  "slug": "go-gopher-tshirt",
+  "description": "Official Go programming language mascot t-shirt. Available in multiple sizes and colors.",
+  "category_id": 5,
+  "base_price": 1500.00,
+  "is_active": true,
+  "is_featured": false,
+  "created_at": "2025-10-10T10:00:00Z",
+  "updated_at": "2025-10-10T10:00:00Z"
+}
+```
+
+**Errors:**
+- `404 Not Found` - Product doesn't exist
+- `400 Bad Request` - Invalid product ID
+
+---
+
+### GET /api/categories
+
+List all product categories.
+
+**Request:**
+```http
+GET /api/categories
+```
+
+**Response:** `200 OK`
+```json
+{
+  "categories": [
+    {
+      "id": 1,
+      "name": "Clothing",
+      "slug": "clothing",
+      "description": "T-shirts, hoodies, and apparel",
+      "parent_id": null,
+      "is_active": true,
+      "created_at": "2025-10-01T00:00:00Z"
+    },
+    {
+      "id": 5,
+      "name": "Tech Apparel",
+      "slug": "tech-apparel",
+      "description": "Programming and tech-themed clothing",
+      "parent_id": 1,
+      "is_active": true,
+      "created_at": "2025-10-02T00:00:00Z"
+    }
+  ],
+  "total": 2
+}
+```
+
+---
+
+### GET /api/products/:productId/images
+
+Get all images for a specific product.
+
+**Request:**
+```http
+GET /api/products/1/images
+```
+
+**Response:** `200 OK`
+```json
+{
+  "images": [
+    {
+      "id": 1,
+      "product_id": 1,
+      "image_url": "https://example.com/images/gopher-tshirt-front.jpg",
+      "alt_text": "Go Gopher T-Shirt Front View",
+      "display_order": 1,
+      "is_primary": true
+    },
+    {
+      "id": 2,
+      "product_id": 1,
+      "image_url": "https://example.com/images/gopher-tshirt-back.jpg",
+      "alt_text": "Go Gopher T-Shirt Back View",
+      "display_order": 2,
+      "is_primary": false
+    }
+  ]
+}
+```
+
+---
+
+## Shopping Cart Endpoints
+
+### POST /api/cart
+
+Add an item to the shopping cart. Works for both authenticated and guest users.
+
+**Request (Authenticated User):**
+```http
+POST /api/cart
+Authorization: Bearer <jwt-token>
+Content-Type: application/json
+```
+
+**Request (Guest User):**
+```http
+POST /api/cart
+X-Session-ID: <unique-session-id>
+Content-Type: application/json
+```
+
+**Body:**
+```json
+{
+  "product_id": 1,
+  "quantity": 2
+}
+```
+
+**Response:** `200 OK`
+```json
+{
+  "message": "Item added to cart successfully"
+}
+```
+
+**Errors:**
+- `400 Bad Request` - Invalid product_id or quantity
+- `404 Not Found` - Product doesn't exist
+- `401 Unauthorized` - Missing both JWT and session ID
+
+---
+
+### GET /api/cart
+
+Retrieve the current user's or guest's shopping cart.
+
+**Request (Authenticated):**
+```http
+GET /api/cart
+Authorization: Bearer <jwt-token>
+```
+
+**Request (Guest):**
+```http
+GET /api/cart
+X-Session-ID: <unique-session-id>
+```
+
+**Response:** `200 OK`
+```json
+{
+  "items": [
+    {
+      "id": 1,
+      "product_id": 1,
+      "quantity": 2,
+      "product_name": "Go Gopher T-Shirt",
+      "product_slug": "go-gopher-tshirt",
+      "price": 1500.00,
+      "subtotal": 3000.00
+    },
+    {
+      "id": 2,
+      "product_id": 2,
+      "quantity": 1,
+      "product_name": "Docker Whale Hoodie",
+      "product_slug": "docker-whale-hoodie",
+      "price": 3500.00,
+      "subtotal": 3500.00
+    }
+  ],
+  "total_items": 3,
+  "subtotal": 6500.00
+}
+```
+
+---
+
+### PUT /api/cart/:productId
+
+Update the quantity of an item in the cart.
+
+**Request:**
+```http
+PUT /api/cart/1
+Authorization: Bearer <jwt-token>
+Content-Type: application/json
+```
+
+**Body:**
+```json
+{
+  "quantity": 5
+}
+```
+
+**Response:** `200 OK`
+```json
+{
+  "message": "Cart item updated successfully"
+}
+```
+
+**Errors:**
+- `400 Bad Request` - Invalid quantity (must be > 0)
+- `404 Not Found` - Item not in cart
+
+---
+
+### DELETE /api/cart/:productId
+
+Remove an item from the cart.
+
+**Request:**
+```http
+DELETE /api/cart/1
+Authorization: Bearer <jwt-token>
+```
+
+**Response:** `200 OK`
+```json
+{
+  "message": "Item removed from cart successfully"
+}
+```
+
+---
+
+### POST /api/cart/migrate
+
+Migrate guest cart items to authenticated user's cart after login/registration.
+
+**Request:**
+```http
+POST /api/cart/migrate
+Authorization: Bearer <jwt-token>
+X-Session-ID: <guest-session-id>
+```
+
+**Response:** `200 OK`
+```json
+{
+  "message": "Cart migrated successfully",
+  "items_migrated": 3
+}
+```
+
+---
+
+## Order Endpoints
+
+### POST /api/orders
+
+Create a new order from the current cart items.
+
+**Request:**
+```http
+POST /api/orders
+Authorization: Bearer <jwt-token>
+Content-Type: application/json
+```
+
+**Body:**
+```json
+{
+  "shipping_address_id": 1,
+  "payment_method": "mpesa",
+  "notes": "Please deliver between 9 AM - 5 PM"
+}
+```
+
+**Response:** `201 Created`
+```json
+{
+  "message": "Order created successfully",
+  "order": {
+    "id": 123,
+    "order_number": "ORD-20251013-0123",
+    "user_id": 1,
+    "total_amount": 6500.00,
+    "status": "pending",
+    "payment_method": "mpesa",
+    "created_at": "2025-10-13T10:30:00Z"
+  }
+}
+```
+
+**Errors:**
+- `400 Bad Request` - Empty cart or invalid address
+- `401 Unauthorized` - Not authenticated (guest users cannot place orders)
+
+---
+
+### GET /api/orders/:id
+
+Get details of a specific order.
+
+**Request:**
+```http
+GET /api/orders/123
+Authorization: Bearer <jwt-token>
+```
+
+**Response:** `200 OK`
+```json
+{
+  "id": 123,
+  "order_number": "ORD-20251013-0123",
+  "user_id": 1,
+  "total_amount": 6500.00,
+  "status": "pending",
+  "payment_method": "mpesa",
+  "notes": "Please deliver between 9 AM - 5 PM",
+  "items": [
+    {
+      "id": 1,
+      "product_id": 1,
+      "product_name": "Go Gopher T-Shirt",
+      "quantity": 2,
+      "price": 1500.00,
+      "subtotal": 3000.00
+    },
+    {
+      "id": 2,
+      "product_id": 2,
+      "product_name": "Docker Whale Hoodie",
+      "quantity": 1,
+      "price": 3500.00,
+      "subtotal": 3500.00
+    }
+  ],
+  "created_at": "2025-10-13T10:30:00Z",
+  "updated_at": "2025-10-13T10:30:00Z"
+}
+```
+
+**Errors:**
+- `404 Not Found` - Order doesn't exist
+- `403 Forbidden` - Order belongs to another user
+
+---
+
+### GET /api/orders
+
+List all orders for the authenticated user.
+
+**Request:**
+```http
+GET /api/orders
+Authorization: Bearer <jwt-token>
+```
+
+**Response:** `200 OK`
+```json
+{
+  "orders": [
+    {
+      "id": 123,
+      "order_number": "ORD-20251013-0123",
+      "total_amount": 6500.00,
+      "status": "pending",
+      "created_at": "2025-10-13T10:30:00Z"
+    },
+    {
+      "id": 122,
+      "order_number": "ORD-20251012-0122",
+      "total_amount": 4200.00,
+      "status": "delivered",
+      "created_at": "2025-10-12T14:20:00Z"
+    }
+  ],
+  "total": 2
+}
+```
+
+---
+
+## Loyalty Points Endpoints
+
+### GET /api/points
+
+Get the authenticated user's loyalty points balance and recent transactions.
+
+**Request:**
+```http
+GET /api/points
+Authorization: Bearer <jwt-token>
+```
+
+**Response:** `200 OK`
+```json
+{
+  "balance": 150,
+  "transactions": [
+    {
+      "id": 1,
+      "points": 100,
+      "transaction_type": "earned",
+      "description": "Order #ORD-20251013-0123",
+      "created_at": "2025-10-13T10:35:00Z"
+    },
+    {
+      "id": 2,
+      "points": 50,
+      "transaction_type": "earned",
+      "description": "Welcome bonus",
+      "created_at": "2025-10-13T09:00:00Z"
+    }
+  ]
+}
+```
+
+---
+
+## Admin Endpoints
+
+All admin endpoints require authentication with an admin role JWT token.
+
+### Product Management
+
+#### POST /api/admin/products
+
+Create a new product.
+
+**Request:**
+```http
+POST /api/admin/products
+Authorization: Bearer <admin-jwt-token>
+Content-Type: application/json
+```
+
+**Body:**
+```json
+{
+  "name": "Kubernetes Mug",
+  "slug": "kubernetes-mug",
+  "description": "Ceramic coffee mug with Kubernetes logo",
+  "category_id": 3,
+  "base_price": 800.00,
+  "is_active": true,
+  "is_featured": false
+}
+```
+
+**Response:** `201 Created`
+```json
+{
+  "message": "Product created successfully",
+  "product": {
+    "id": 10,
+    "name": "Kubernetes Mug",
+    "slug": "kubernetes-mug",
+    "description": "Ceramic coffee mug with Kubernetes logo",
+    "category_id": 3,
+    "base_price": 800.00,
+    "is_active": true,
+    "is_featured": false,
+    "created_at": "2025-10-13T11:00:00Z"
+  }
+}
+```
+
+---
+
+#### PUT /api/admin/products/:id
+
+Update an existing product.
+
+**Request:**
+```http
+PUT /api/admin/products/10
+Authorization: Bearer <admin-jwt-token>
+Content-Type: application/json
+```
+
+**Body:**
+```json
+{
+  "name": "Kubernetes Coffee Mug",
+  "base_price": 900.00,
+  "is_featured": true
+}
+```
+
+**Response:** `200 OK`
+```json
+{
+  "message": "Product updated successfully"
+}
+```
+
+---
+
+#### DELETE /api/admin/products/:id
+
+Delete a product (soft delete).
+
+**Request:**
+```http
+DELETE /api/admin/products/10
+Authorization: Bearer <admin-jwt-token>
+```
+
+**Response:** `200 OK`
+```json
+{
+  "message": "Product deleted successfully"
+}
+```
+
+---
+
+#### GET /api/admin/products
+
+List all products (including inactive ones) for admin management.
+
+**Request:**
+```http
+GET /api/admin/products
+Authorization: Bearer <admin-jwt-token>
+```
+
+**Response:** `200 OK`
+```json
+{
+  "products": [
+    {
+      "id": 1,
+      "name": "Go Gopher T-Shirt",
+      "slug": "go-gopher-tshirt",
+      "category_id": 5,
+      "base_price": 1500.00,
+      "is_active": true,
+      "is_featured": false
+    }
+  ],
+  "total": 1
+}
+```
+
+---
+
+### Category Management
+
+#### POST /api/admin/categories
+
+Create a new category.
+
+**Request:**
+```http
+POST /api/admin/categories
+Authorization: Bearer <admin-jwt-token>
+Content-Type: application/json
+```
+
+**Body:**
+```json
+{
+  "name": "Accessories",
+  "slug": "accessories",
+  "description": "Bags, stickers, and other accessories",
+  "parent_id": null,
+  "is_active": true
+}
+```
+
+**Response:** `201 Created`
+```json
+{
+  "message": "Category created successfully",
+  "category": {
+    "id": 10,
+    "name": "Accessories",
+    "slug": "accessories",
+    "description": "Bags, stickers, and other accessories",
+    "parent_id": null,
+    "is_active": true,
+    "created_at": "2025-10-13T11:30:00Z"
+  }
+}
+```
+
+---
+
+#### PUT /api/admin/categories/:id
+
+Update a category.
+
+**Request:**
+```http
+PUT /api/admin/categories/10
+Authorization: Bearer <admin-jwt-token>
+Content-Type: application/json
+```
+
+**Body:**
+```json
+{
+  "description": "Bags, stickers, mugs, and other merchandise"
+}
+```
+
+**Response:** `200 OK`
+```json
+{
+  "message": "Category updated successfully"
+}
+```
+
+---
+
+#### DELETE /api/admin/categories/:id
+
+Delete a category.
+
+**Request:**
+```http
+DELETE /api/admin/categories/10
+Authorization: Bearer <admin-jwt-token>
+```
+
+**Response:** `200 OK`
+```json
+{
+  "message": "Category deleted successfully"
+}
+```
+
+---
+
+### Product Image Management
+
+#### POST /api/admin/products/:productId/images
+
+Add an image to a product.
+
+**Request:**
+```http
+POST /api/admin/products/1/images
+Authorization: Bearer <admin-jwt-token>
+Content-Type: application/json
+```
+
+**Body:**
+```json
+{
+  "image_url": "https://example.com/images/product-123.jpg",
+  "alt_text": "Product front view",
+  "display_order": 1,
+  "is_primary": true
+}
+```
+
+**Response:** `201 Created`
+```json
+{
+  "message": "Image added successfully",
+  "image": {
+    "id": 15,
+    "product_id": 1,
+    "image_url": "https://example.com/images/product-123.jpg",
+    "alt_text": "Product front view",
+    "display_order": 1,
+    "is_primary": true
+  }
+}
+```
+
+---
+
+#### PUT /api/admin/images/:imageId
+
+Update a product image.
+
+**Request:**
+```http
+PUT /api/admin/images/15
+Authorization: Bearer <admin-jwt-token>
+Content-Type: application/json
+```
+
+**Body:**
+```json
+{
+  "alt_text": "Product front view - updated",
+  "display_order": 2
+}
+```
+
+**Response:** `200 OK`
+```json
+{
+  "message": "Image updated successfully"
+}
+```
+
+---
+
+#### DELETE /api/admin/images/:imageId
+
+Delete a product image.
+
+**Request:**
+```http
+DELETE /api/admin/images/15
+Authorization: Bearer <admin-jwt-token>
+```
+
+**Response:** `200 OK`
+```json
+{
+  "message": "Image deleted successfully"
+}
+```
+
+---
+
+### Order Management
+
+#### GET /api/admin/orders
+
+View all orders in the system.
+
+**Request:**
+```http
+GET /api/admin/orders
+Authorization: Bearer <admin-jwt-token>
+```
+
+**Response:** `200 OK`
+```json
+{
+  "orders": [
+    {
+      "id": 123,
+      "order_number": "ORD-20251013-0123",
+      "user_id": 1,
+      "user_email": "john@example.com",
+      "total_amount": 6500.00,
+      "status": "pending",
+      "created_at": "2025-10-13T10:30:00Z"
+    }
+  ],
+  "total": 1
+}
+```
+
+---
+
+#### PUT /api/admin/orders/:id/status
+
+Update order status.
+
+**Request:**
+```http
+PUT /api/admin/orders/123/status
+Authorization: Bearer <admin-jwt-token>
+Content-Type: application/json
+```
+
+**Body:**
+```json
+{
+  "status": "processing"
+}
+```
+
+**Valid statuses:** `pending`, `processing`, `shipped`, `delivered`, `cancelled`
+
+**Response:** `200 OK`
+```json
+{
+  "message": "Order status updated successfully"
+}
+```
+
+---
+
+## Error Responses
+
+All endpoints return consistent error responses:
+
+### 400 Bad Request
+```json
+{
+  "error": "Invalid request data",
+  "details": "Quantity must be greater than 0"
+}
+```
+
+### 401 Unauthorized
+```json
+{
+  "error": "Authorization header required"
+}
+```
+
+### 403 Forbidden
+```json
+{
+  "error": "Access denied. Admin privileges required."
+}
+```
+
+### 404 Not Found
+```json
+{
+  "error": "Product not found"
+}
+```
+
+### 409 Conflict
+```json
+{
+  "error": "User with this email already exists"
+}
+```
+
+### 500 Internal Server Error
+```json
+{
+  "error": "Internal server error",
+  "details": "An unexpected error occurred"
+}
+```
+
+---
+
+## Rate Limiting
+
+The API implements rate limiting to prevent abuse. Current limits:
+
+- **Authenticated requests**: 100 requests per minute
+- **Unauthenticated requests**: 20 requests per minute
+
+When rate limited, you'll receive a `429 Too Many Requests` response:
+```json
+{
+  "error": "Rate limit exceeded. Please try again later."
+}
+```
+
+---
+
+## CORS
+
+The API supports Cross-Origin Resource Sharing (CORS) for frontend applications. All origins are currently allowed in development. In production, only whitelisted domains will be permitted.
+
+---
+
+## Support & Contact
+
+For API support or to report issues:
+- **GitHub Issues**: [https://github.com/lxmwaniky/merch-ke-api/issues](https://github.com/lxmwaniky/merch-ke-api/issues)
+- **Email**: lekko254@gmail.com
+
+---
+
+**Last Updated**: October 13, 2025  
+**API Version**: 1.0.0
 - **Method:** `POST`
 - **URL:** `http://localhost:8080/api/auth/register`
 - **Headers:**
