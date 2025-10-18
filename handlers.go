@@ -2,11 +2,9 @@ package main
 
 import (
 	"fmt"
-	"log"
 	"os"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/golang-jwt/jwt/v5"
@@ -1417,40 +1415,4 @@ func validateCartInput(c *fiber.Ctx) error {
 	return c.Next()
 }
 
-// =====================================================
-// LOGGING MIDDLEWARE
-// =====================================================
 
-// Request logging middleware
-func loggingMiddleware(c *fiber.Ctx) error {
-	start := time.Now()
-
-	// Process request
-	err := c.Next()
-
-	// Log request details
-	duration := time.Since(start)
-	status := c.Response().StatusCode()
-
-	log.Printf(
-		"%s %s - %d - %v - %s",
-		c.Method(),
-		c.Path(),
-		status,
-		duration,
-		c.IP(),
-	)
-
-	return err
-}
-
-// Error logging middleware
-func errorLoggingMiddleware(c *fiber.Ctx) error {
-	err := c.Next()
-
-	if err != nil {
-		log.Printf("ERROR: %s %s - %v", c.Method(), c.Path(), err)
-	}
-
-	return err
-}

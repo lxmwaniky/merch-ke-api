@@ -19,8 +19,6 @@ func main() {
 	})
 
 	app.Use(cors.New())
-	app.Use(loggingMiddleware)
-	app.Use(errorLoggingMiddleware)
 
 	// Public routes
 	app.Get("/health", healthHandler)
