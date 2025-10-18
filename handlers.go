@@ -284,6 +284,7 @@ func adminCreateProductHandler(c *fiber.Ctx) error {
 	if req.ImageURL != "" {
 		imageReq := ProductImageRequest{
 			ImageURL:     req.ImageURL,
+			ImagePath:    req.ImageURL, // Use URL for path as well since we're using URLs
 			AltText:      req.Name,
 			DisplayOrder: 1,
 			IsPrimary:    true,

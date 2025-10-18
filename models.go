@@ -477,30 +477,45 @@ func updateProduct(id int, req *UpdateProductRequest) (*Product, error) {
 
 	// Handle image_url update if provided
 	if req.ImageURL != nil && *req.ImageURL != "" {
+		fmt.Printf("🖼️  Processing image_url update for product %d: %s\n", id, *req.ImageURL)
+		
 		// Check if product already has an image
 		var existingImageID int
 		checkQuery := `SELECT id FROM catalog.product_images WHERE product_id = $1 AND is_primary = true LIMIT 1`
 		err := db.QueryRow(checkQuery, id).Scan(&existingImageID)
-
+		
 		if err == sql.ErrNoRows {
 			// No existing image, create new one
+			fmt.Printf("📸 No existing image found, creating new one for product %d\n", id)
 			insertQuery := `
-				INSERT INTO catalog.product_images (product_id, image_url, is_primary, display_order)
-				VALUES ($1, $2, true, 0)
+				INSERT INTO catalog.product_images (product_id, image_url, image_path, is_primary, display_order)
+				VALUES ($1, $2, $2, true, 0)
 			`
 			_, err = db.Exec(insertQuery, id, *req.ImageURL)
 			if err != nil {
-				// Log error but don't fail the whole update
-				fmt.Printf("Warning: Failed to insert product image: %v\n", err)
+				fmt.Printf("❌ Failed to insert product image: %v\n", err)
+			} else {
+				fmt.Printf("✅ Successfully created new product image for product %d\n", id)
 			}
 		} else if err == nil {
 			// Update existing image
-			updateQuery := `UPDATE catalog.product_images SET image_url = $1, updated_at = NOW() WHERE id = $2`
+			fmt.Printf("📸 Found existing image ID %d, updating...\n", existingImageID)
+			updateQuery := `UPDATE catalog.product_images SET image_url = $1, image_path = $1 WHERE id = $2`
 			_, err = db.Exec(updateQuery, *req.ImageURL, existingImageID)
 			if err != nil {
-				// Log error but don't fail the whole update
-				fmt.Printf("Warning: Failed to update product image: %v\n", err)
+				fmt.Printf("❌ Failed to update product image: %v\n", err)
+			} else {
+				fmt.Printf("✅ Successfully updated product image ID %d with URL: %s\n", existingImageID, *req.ImageURL)
 			}
+		} else {
+			// Some other error occurred
+			fmt.Printf("❌ Error checking for existing image: %v\n", err)
+		}
+	} else {
+		if req.ImageURL == nil {
+			fmt.Printf("ℹ️  No image_url provided in update request for product %d\n", id)
+		} else {
+			fmt.Printf("ℹ️  Empty image_url provided in update request for product %d\n", id)
 		}
 	}
 
