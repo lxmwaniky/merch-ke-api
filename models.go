@@ -478,12 +478,12 @@ func updateProduct(id int, req *UpdateProductRequest) (*Product, error) {
 	// Handle image_url update if provided
 	if req.ImageURL != nil && *req.ImageURL != "" {
 		fmt.Printf("🖼️  Processing image_url update for product %d: %s\n", id, *req.ImageURL)
-		
+
 		// Check if product already has an image
 		var existingImageID int
 		checkQuery := `SELECT id FROM catalog.product_images WHERE product_id = $1 AND is_primary = true LIMIT 1`
 		err := db.QueryRow(checkQuery, id).Scan(&existingImageID)
-		
+
 		if err == sql.ErrNoRows {
 			// No existing image, create new one
 			fmt.Printf("📸 No existing image found, creating new one for product %d\n", id)
