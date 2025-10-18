@@ -566,6 +566,7 @@ type OrderItem struct {
 type CreateOrderRequest struct {
 	ShippingAddress *string `json:"shipping_address,omitempty"`
 	BillingAddress  *string `json:"billing_address,omitempty"`
+	PaymentMethod   *string `json:"payment_method,omitempty"`
 	Notes           *string `json:"notes,omitempty"`
 }
 
@@ -891,12 +892,21 @@ func createOrderFromCart(userID *int, sessionID *string, req *CreateOrderRequest
 	// Create order
 	var orderID int
 	orderQuery := `
-		INSERT INTO orders.orders (user_id, session_id, order_number, status, total_amount, payment_status, shipping_address, billing_address, notes)
-		VALUES ($1, $2, $3, 'pending', $4, 'pending', $5, $6, $7)
+		INSERT INTO orders.orders (
+			user_id, session_id, order_number, status, 
+			subtotal, total_amount, payment_status, payment_method,
+			shipping_address, billing_address, notes
+		)
+		VALUES ($1, $2, $3, 'pending', $4, $5, 'pending', $6, $7, $8, $9)
 		RETURNING id
 	`
 
-	err = tx.QueryRow(orderQuery, userID, sessionID, orderNumber, totalAmount, req.ShippingAddress, req.BillingAddress, req.Notes).Scan(&orderID)
+	err = tx.QueryRow(
+		orderQuery, 
+		userID, sessionID, orderNumber, 
+		totalAmount, totalAmount, req.PaymentMethod, // subtotal = total for now
+		req.ShippingAddress, req.BillingAddress, req.Notes,
+	).Scan(&orderID)
 	if err != nil {
 		return nil, err
 	}
@@ -904,11 +914,23 @@ func createOrderFromCart(userID *int, sessionID *string, req *CreateOrderRequest
 	// Create order items
 	for _, item := range cartItems {
 		totalPrice := float64(item.Quantity) * item.Price
+		
+		// For now, use product name and generate a simple SKU
+		// TODO: Implement proper variant support
+		productName := item.ProductName
+		if productName == "" {
+			productName = "Product"
+		}
+		variantSKU := fmt.Sprintf("PROD-%d", item.ProductID)
+		
 		orderItemQuery := `
-			INSERT INTO orders.order_items (order_id, product_id, quantity, unit_price, total_price)
-			VALUES ($1, $2, $3, $4, $5)
+			INSERT INTO orders.order_items (
+				order_id, product_name, variant_sku, 
+				unit_price, quantity, total_price
+			)
+			VALUES ($1, $2, $3, $4, $5, $6)
 		`
-		_, err = tx.Exec(orderItemQuery, orderID, item.ProductID, item.Quantity, item.Price, totalPrice)
+		_, err = tx.Exec(orderItemQuery, orderID, productName, variantSKU, item.Price, item.Quantity, totalPrice)
 		if err != nil {
 			return nil, err
 		}
