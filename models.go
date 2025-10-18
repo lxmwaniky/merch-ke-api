@@ -902,8 +902,8 @@ func createOrderFromCart(userID *int, sessionID *string, req *CreateOrderRequest
 	`
 
 	err = tx.QueryRow(
-		orderQuery, 
-		userID, sessionID, orderNumber, 
+		orderQuery,
+		userID, sessionID, orderNumber,
 		totalAmount, totalAmount, req.PaymentMethod, // subtotal = total for now
 		req.ShippingAddress, req.BillingAddress, req.Notes,
 	).Scan(&orderID)
@@ -914,7 +914,7 @@ func createOrderFromCart(userID *int, sessionID *string, req *CreateOrderRequest
 	// Create order items
 	for _, item := range cartItems {
 		totalPrice := float64(item.Quantity) * item.Price
-		
+
 		// For now, use product name and generate a simple SKU
 		// TODO: Implement proper variant support
 		productName := item.ProductName
@@ -922,7 +922,7 @@ func createOrderFromCart(userID *int, sessionID *string, req *CreateOrderRequest
 			productName = "Product"
 		}
 		variantSKU := fmt.Sprintf("PROD-%d", item.ProductID)
-		
+
 		orderItemQuery := `
 			INSERT INTO orders.order_items (
 				order_id, product_name, variant_sku, 
