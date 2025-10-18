@@ -481,7 +481,7 @@ func updateProduct(id int, req *UpdateProductRequest) (*Product, error) {
 		var existingImageID int
 		checkQuery := `SELECT id FROM catalog.product_images WHERE product_id = $1 AND is_primary = true LIMIT 1`
 		err := db.QueryRow(checkQuery, id).Scan(&existingImageID)
-		
+
 		if err == sql.ErrNoRows {
 			// No existing image, create new one
 			insertQuery := `

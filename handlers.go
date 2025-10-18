@@ -279,7 +279,7 @@ func adminCreateProductHandler(c *fiber.Ctx) error {
 
 	// Create images if provided
 	var createdImages []ProductImage
-	
+
 	// If image_url is provided in the main request, create a default image
 	if req.ImageURL != "" {
 		imageReq := ProductImageRequest{
@@ -295,7 +295,7 @@ func adminCreateProductHandler(c *fiber.Ctx) error {
 			createdImages = append(createdImages, *image)
 		}
 	}
-	
+
 	// Create additional images if provided in images array
 	if len(req.Images) > 0 {
 		for i, imageReq := range req.Images {
@@ -303,7 +303,7 @@ func adminCreateProductHandler(c *fiber.Ctx) error {
 			if imageReq.ImageURL == "" {
 				continue // Skip invalid images
 			}
-			
+
 			// Set display order if not set
 			if imageReq.DisplayOrder == 0 {
 				imageReq.DisplayOrder = i + 2 // Start from 2 since primary is 1
@@ -436,7 +436,7 @@ func adminGetProductsHandler(c *fiber.Ctx) error {
 	for rows.Next() {
 		var p Product
 		err := rows.Scan(
-			&p.ID, &p.Name, &p.Slug, &p.Description, &p.ShortDescription, 
+			&p.ID, &p.Name, &p.Slug, &p.Description, &p.ShortDescription,
 			&p.CategoryID, &p.BasePrice, &p.IsActive, &p.IsFeatured,
 			&p.CreatedAt, &p.UpdatedAt, &p.ImageURL,
 		)
