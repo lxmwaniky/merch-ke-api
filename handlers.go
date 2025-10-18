@@ -1060,15 +1060,15 @@ func getOrderHandler(c *fiber.Ctx) error {
 
 // Get user orders
 func getUserOrdersHandler(c *fiber.Ctx) error {
-	user := c.Locals("user")
-	if user == nil {
+	// Get user ID from context (set by auth middleware)
+	userID := c.Locals("userID")
+	if userID == nil {
 		return c.Status(401).JSON(fiber.Map{
 			"error": "Authentication required",
 		})
 	}
 
-	userClaims := user.(*Claims)
-	orders, err := getUserOrders(userClaims.UserID)
+	orders, err := getUserOrders(userID.(int))
 	if err != nil {
 		return c.Status(500).JSON(fiber.Map{
 			"error":   "Failed to get orders",

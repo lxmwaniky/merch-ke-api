@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"strings"
 	"time"
 )
@@ -554,12 +555,14 @@ type Order struct {
 type OrderItem struct {
 	ID          int     `json:"id"`
 	OrderID     int     `json:"order_id"`
-	ProductID   int     `json:"product_id"`
-	Quantity    int     `json:"quantity"`
-	UnitPrice   float64 `json:"unit_price"`
-	TotalPrice  float64 `json:"total_price"`
+	VariantID   *int    `json:"variant_id,omitempty"`
 	ProductName string  `json:"product_name"`
-	ProductSlug string  `json:"product_slug"`
+	VariantSKU  string  `json:"variant_sku"`
+	Size        *string `json:"size,omitempty"`
+	Color       *string `json:"color,omitempty"`
+	UnitPrice   float64 `json:"unit_price"`
+	Quantity    int     `json:"quantity"`
+	TotalPrice  float64 `json:"total_price"`
 }
 
 // CreateOrderRequest represents order creation request
@@ -851,23 +854,30 @@ func getUserPoints(userID int) (*UserPoints, error) {
 
 // Create order from cart
 func createOrderFromCart(userID *int, sessionID *string, req *CreateOrderRequest) (*Order, error) {
+	log.Printf("🔵 createOrderFromCart STARTED - userID=%v, sessionID=%v", userID, sessionID)
+
 	// Generate unique order number
 	orderNumber := generateOrderNumber()
+	log.Printf("🔵 Generated order number: %s", orderNumber)
 
 	// Start transaction
 	tx, err := db.Begin()
 	if err != nil {
+		log.Printf("❌ Failed to begin transaction: %v", err)
 		return nil, err
 	}
 	defer func() {
 		if err != nil {
+			log.Printf("🔴 Rolling back transaction")
 			tx.Rollback()
 		} else {
+			log.Printf("🟢 Committing transaction")
 			tx.Commit()
 		}
 	}()
 
 	// Get cart items
+	log.Printf("🔵 Fetching cart items...")
 	var cartItems []CartItem
 	if userID != nil {
 		cartItems, err = getUserCartItems(*userID)
@@ -876,12 +886,16 @@ func createOrderFromCart(userID *int, sessionID *string, req *CreateOrderRequest
 	}
 
 	if err != nil {
+		log.Printf("❌ Failed to get cart items: %v", err)
 		return nil, err
 	}
 
 	if len(cartItems) == 0 {
+		log.Printf("❌ Cart is empty")
 		return nil, fmt.Errorf("cart is empty")
 	}
+
+	log.Printf("🟢 Found %d cart items", len(cartItems))
 
 	// Calculate total amount
 	var totalAmount float64
@@ -908,6 +922,12 @@ func createOrderFromCart(userID *int, sessionID *string, req *CreateOrderRequest
 		req.ShippingAddress, req.BillingAddress, req.Notes,
 	).Scan(&orderID)
 	if err != nil {
+		log.Printf("❌ ORDER INSERT FAILED - SQL Error: %v", err)
+		log.Printf("   Values: userID=%v, sessionID=%v, orderNumber=%s", userID, sessionID, orderNumber)
+		log.Printf("   Amounts: subtotal=%f, total=%f", totalAmount, totalAmount)
+		log.Printf("   Payment: method=%v, status=pending", req.PaymentMethod)
+		log.Printf("   Addresses: shipping=%v, billing=%v", req.ShippingAddress, req.BillingAddress)
+		log.Printf("   Notes: %v", req.Notes)
 		return nil, err
 	}
 
@@ -930,13 +950,16 @@ func createOrderFromCart(userID *int, sessionID *string, req *CreateOrderRequest
 			)
 			VALUES ($1, $2, $3, $4, $5, $6)
 		`
+		log.Printf("🔵 Inserting order item: %s (SKU: %s, Price: %.2f, Qty: %d)", productName, variantSKU, item.Price, item.Quantity)
 		_, err = tx.Exec(orderItemQuery, orderID, productName, variantSKU, item.Price, item.Quantity, totalPrice)
 		if err != nil {
+			log.Printf("❌ Failed to insert order item: %v", err)
 			return nil, err
 		}
 	}
 
 	// Clear cart after order creation
+	log.Printf("🔵 Clearing cart...")
 	if userID != nil {
 		_, err = tx.Exec("DELETE FROM orders.cart_items WHERE user_id = $1", *userID)
 	} else if sessionID != nil {
@@ -944,16 +967,34 @@ func createOrderFromCart(userID *int, sessionID *string, req *CreateOrderRequest
 	}
 
 	if err != nil {
+		log.Printf("❌ Failed to clear cart: %v", err)
 		return nil, err
 	}
+	log.Printf("🟢 Cart cleared")
 
-	// Get the created order
-	order, err := getOrderByID(orderID)
+	// Get the created order using the transaction
+	log.Printf("🔵 Fetching created order (ID: %d) using transaction...", orderID)
+	query := `
+		SELECT id, user_id, session_id, order_number, status, total_amount, payment_status, 
+		       payment_method, shipping_address, billing_address, notes, created_at, updated_at
+		FROM orders.orders 
+		WHERE id = $1
+	`
+
+	var order Order
+	err = tx.QueryRow(query, orderID).Scan(
+		&order.ID, &order.UserID, &order.SessionID, &order.OrderNumber,
+		&order.Status, &order.TotalAmount, &order.PaymentStatus,
+		&order.PaymentMethod, &order.ShippingAddress, &order.BillingAddress,
+		&order.Notes, &order.CreatedAt, &order.UpdatedAt,
+	)
 	if err != nil {
+		log.Printf("❌ Failed to fetch order from transaction: %v", err)
 		return nil, err
 	}
 
-	return order, nil
+	log.Printf("🟢 Order fetched successfully")
+	return &order, nil
 }
 
 // Get order by ID
@@ -979,11 +1020,10 @@ func getOrderByID(orderID int) (*Order, error) {
 
 	// Get order items
 	itemsQuery := `
-		SELECT oi.id, oi.order_id, oi.product_id, oi.quantity, oi.unit_price, oi.total_price,
-		       p.name as product_name, p.slug as product_slug
-		FROM orders.order_items oi
-		JOIN catalog.products p ON oi.product_id = p.id
-		WHERE oi.order_id = $1
+		SELECT id, order_id, product_name, variant_sku, size, color,
+		       unit_price, quantity, total_price
+		FROM orders.order_items
+		WHERE order_id = $1
 	`
 
 	rows, err := db.Query(itemsQuery, orderID)
@@ -996,8 +1036,8 @@ func getOrderByID(orderID int) (*Order, error) {
 	for rows.Next() {
 		var item OrderItem
 		err := rows.Scan(
-			&item.ID, &item.OrderID, &item.ProductID, &item.Quantity,
-			&item.UnitPrice, &item.TotalPrice, &item.ProductName, &item.ProductSlug,
+			&item.ID, &item.OrderID, &item.ProductName, &item.VariantSKU,
+			&item.Size, &item.Color, &item.UnitPrice, &item.Quantity, &item.TotalPrice,
 		)
 		if err != nil {
 			return nil, err
