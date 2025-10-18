@@ -3,7 +3,6 @@ package main
 import (
 	"database/sql"
 	"fmt"
-	"log"
 	"strings"
 	"time"
 )
@@ -477,43 +476,22 @@ func updateProduct(id int, req *UpdateProductRequest) (*Product, error) {
 
 	// Handle image_url update if provided
 	if req.ImageURL != nil && *req.ImageURL != "" {
-		fmt.Printf("🖼️  Processing image_url update for product %d: %s\n", id, *req.ImageURL)
-
-		// Check if product already has an image
 		var existingImageID int
 		checkQuery := `SELECT id FROM catalog.product_images WHERE product_id = $1 AND is_primary = true LIMIT 1`
 		err := db.QueryRow(checkQuery, id).Scan(&existingImageID)
 
 		if err == sql.ErrNoRows {
-			// No existing image, create new one
-			fmt.Printf("📸 No existing image found, creating new one for product %d\n", id)
 			insertQuery := `
 				INSERT INTO catalog.product_images (product_id, image_url, image_path, is_primary, display_order)
 				VALUES ($1, $2, $2, true, 0)
 			`
-			_, err = db.Exec(insertQuery, id, *req.ImageURL)
-			if err != nil {
-				fmt.Printf("❌ Failed to insert product image: %v\n", err)
-			} else {
-				fmt.Printf("✅ Successfully created new product image for product %d\n", id)
-			}
+			db.Exec(insertQuery, id, *req.ImageURL)
 		} else if err == nil {
-			// Update existing image
-			fmt.Printf("📸 Found existing image ID %d, updating...\n", existingImageID)
 			updateQuery := `UPDATE catalog.product_images SET image_url = $1, image_path = $1 WHERE id = $2`
-			_, err = db.Exec(updateQuery, *req.ImageURL, existingImageID)
-			if err != nil {
-				fmt.Printf("❌ Failed to update product image: %v\n", err)
-			} else {
-				fmt.Printf("✅ Successfully updated product image ID %d with URL: %s\n", existingImageID, *req.ImageURL)
-			}
-		} else {
-			// Some other error occurred
-			fmt.Printf("❌ Error checking for existing image: %v\n", err)
+			db.Exec(updateQuery, *req.ImageURL, existingImageID)
 		}
 	} else {
 		if req.ImageURL == nil {
-			fmt.Printf("ℹ️  No image_url provided in update request for product %d\n", id)
 		} else {
 			fmt.Printf("ℹ️  Empty image_url provided in update request for product %d\n", id)
 		}
@@ -921,30 +899,23 @@ func getUserPoints(userID int) (*UserPoints, error) {
 
 // Create order from cart
 func createOrderFromCart(userID *int, sessionID *string, req *CreateOrderRequest) (*Order, error) {
-	log.Printf("🔵 createOrderFromCart STARTED - userID=%v, sessionID=%v", userID, sessionID)
-
 	// Generate unique order number
 	orderNumber := generateOrderNumber()
-	log.Printf("🔵 Generated order number: %s", orderNumber)
 
 	// Start transaction
 	tx, err := db.Begin()
 	if err != nil {
-		log.Printf("❌ Failed to begin transaction: %v", err)
 		return nil, err
 	}
 	defer func() {
 		if err != nil {
-			log.Printf("🔴 Rolling back transaction")
 			tx.Rollback()
 		} else {
-			log.Printf("🟢 Committing transaction")
 			tx.Commit()
 		}
 	}()
 
 	// Get cart items
-	log.Printf("🔵 Fetching cart items...")
 	var cartItems []CartItem
 	if userID != nil {
 		cartItems, err = getUserCartItems(*userID)
@@ -953,16 +924,12 @@ func createOrderFromCart(userID *int, sessionID *string, req *CreateOrderRequest
 	}
 
 	if err != nil {
-		log.Printf("❌ Failed to get cart items: %v", err)
 		return nil, err
 	}
 
 	if len(cartItems) == 0 {
-		log.Printf("❌ Cart is empty")
 		return nil, fmt.Errorf("cart is empty")
 	}
-
-	log.Printf("🟢 Found %d cart items", len(cartItems))
 
 	// Calculate total amount
 	var totalAmount float64
@@ -989,12 +956,6 @@ func createOrderFromCart(userID *int, sessionID *string, req *CreateOrderRequest
 		req.ShippingAddress, req.BillingAddress, req.Notes,
 	).Scan(&orderID)
 	if err != nil {
-		log.Printf("❌ ORDER INSERT FAILED - SQL Error: %v", err)
-		log.Printf("   Values: userID=%v, sessionID=%v, orderNumber=%s", userID, sessionID, orderNumber)
-		log.Printf("   Amounts: subtotal=%f, total=%f", totalAmount, totalAmount)
-		log.Printf("   Payment: method=%v, status=pending", req.PaymentMethod)
-		log.Printf("   Addresses: shipping=%v, billing=%v", req.ShippingAddress, req.BillingAddress)
-		log.Printf("   Notes: %v", req.Notes)
 		return nil, err
 	}
 
@@ -1002,8 +963,6 @@ func createOrderFromCart(userID *int, sessionID *string, req *CreateOrderRequest
 	for _, item := range cartItems {
 		totalPrice := float64(item.Quantity) * item.Price
 
-		// For now, use product name and generate a simple SKU
-		// TODO: Implement proper variant support
 		productName := item.ProductName
 		if productName == "" {
 			productName = "Product"
@@ -1017,16 +976,13 @@ func createOrderFromCart(userID *int, sessionID *string, req *CreateOrderRequest
 			)
 			VALUES ($1, $2, $3, $4, $5, $6)
 		`
-		log.Printf("🔵 Inserting order item: %s (SKU: %s, Price: %.2f, Qty: %d)", productName, variantSKU, item.Price, item.Quantity)
 		_, err = tx.Exec(orderItemQuery, orderID, productName, variantSKU, item.Price, item.Quantity, totalPrice)
 		if err != nil {
-			log.Printf("❌ Failed to insert order item: %v", err)
 			return nil, err
 		}
 	}
 
 	// Clear cart after order creation
-	log.Printf("🔵 Clearing cart...")
 	if userID != nil {
 		_, err = tx.Exec("DELETE FROM orders.cart_items WHERE user_id = $1", *userID)
 	} else if sessionID != nil {
@@ -1034,13 +990,10 @@ func createOrderFromCart(userID *int, sessionID *string, req *CreateOrderRequest
 	}
 
 	if err != nil {
-		log.Printf("❌ Failed to clear cart: %v", err)
 		return nil, err
 	}
-	log.Printf("🟢 Cart cleared")
 
 	// Get the created order using the transaction
-	log.Printf("🔵 Fetching created order (ID: %d) using transaction...", orderID)
 	query := `
 		SELECT id, user_id, session_id, order_number, status, total_amount, payment_status, 
 		       payment_method, shipping_address, billing_address, notes, created_at, updated_at
@@ -1056,11 +1009,9 @@ func createOrderFromCart(userID *int, sessionID *string, req *CreateOrderRequest
 		&order.Notes, &order.CreatedAt, &order.UpdatedAt,
 	)
 	if err != nil {
-		log.Printf("❌ Failed to fetch order from transaction: %v", err)
 		return nil, err
 	}
 
-	log.Printf("🟢 Order fetched successfully")
 	return &order, nil
 }
 

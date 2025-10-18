@@ -290,9 +290,7 @@ func adminCreateProductHandler(c *fiber.Ctx) error {
 			IsPrimary:    true,
 		}
 		image, err := createProductImage(product.ID, nil, &imageReq)
-		if err != nil {
-			log.Printf("Failed to create primary image for product %d: %v", product.ID, err)
-		} else {
+		if err == nil {
 			createdImages = append(createdImages, *image)
 		}
 	}
@@ -302,21 +300,18 @@ func adminCreateProductHandler(c *fiber.Ctx) error {
 		for i, imageReq := range req.Images {
 			// Validate each image request
 			if imageReq.ImageURL == "" {
-				continue // Skip invalid images
+				continue
 			}
 
 			// Set display order if not set
 			if imageReq.DisplayOrder == 0 {
-				imageReq.DisplayOrder = i + 2 // Start from 2 since primary is 1
+				imageReq.DisplayOrder = i + 2
 			}
 
 			image, err := createProductImage(product.ID, nil, &imageReq)
-			if err != nil {
-				// Log the error but don't fail the entire request
-				log.Printf("Failed to create image for product %d: %v", product.ID, err)
-				continue
+			if err == nil {
+				createdImages = append(createdImages, *image)
 			}
-			createdImages = append(createdImages, *image)
 		}
 	}
 
