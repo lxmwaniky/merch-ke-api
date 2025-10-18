@@ -29,19 +29,19 @@ type Product struct {
 
 // ProductImage struct for product images
 type ProductImage struct {
-	ID           int    `json:"id"`
-	ProductID    int    `json:"product_id"`
-	VariantID    *int   `json:"variant_id"`
-	ImageURL     string `json:"image_url"`
-	ImagePath    string `json:"image_path"`
-	ImageType    string `json:"image_type"`
-	AltText      string `json:"alt_text"`
-	DisplayOrder int    `json:"display_order"`
-	FileSize     int    `json:"file_size"`
-	Width        int    `json:"width"`
-	Height       int    `json:"height"`
-	IsPrimary    bool   `json:"is_primary"`
-	CreatedAt    string `json:"created_at"`
+	ID           int       `json:"id"`
+	ProductID    int       `json:"product_id"`
+	VariantID    *int      `json:"variant_id,omitempty"`
+	ImageURL     string    `json:"image_url"`
+	ImagePath    string    `json:"image_path"`
+	ImageType    string    `json:"image_type"`
+	AltText      *string   `json:"alt_text,omitempty"`
+	DisplayOrder int       `json:"display_order"`
+	FileSize     *int      `json:"file_size,omitempty"`
+	Width        *int      `json:"width,omitempty"`
+	Height       *int      `json:"height,omitempty"`
+	IsPrimary    bool      `json:"is_primary"`
+	CreatedAt    time.Time `json:"created_at"`
 }
 
 // ProductImageRequest struct for creating images
