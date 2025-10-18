@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"os"
 	"strconv"
@@ -522,6 +523,38 @@ func adminDeleteCategoryHandler(c *fiber.Ctx) error {
 	if err != nil {
 		return c.Status(400).JSON(fiber.Map{
 			"error": "Invalid category ID",
+		})
+	}
+
+	// Check if category has products
+	var productCount int
+	err = db.QueryRow("SELECT COUNT(*) FROM catalog.products WHERE category_id = $1", id).Scan(&productCount)
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{
+			"error":   "Failed to check category usage",
+			"details": err.Error(),
+		})
+	}
+
+	if productCount > 0 {
+		return c.Status(400).JSON(fiber.Map{
+			"error": fmt.Sprintf("Cannot delete category: %d products are using this category. Please reassign or delete those products first.", productCount),
+		})
+	}
+
+	// Check if category has subcategories
+	var subcategoryCount int
+	err = db.QueryRow("SELECT COUNT(*) FROM catalog.categories WHERE parent_id = $1", id).Scan(&subcategoryCount)
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{
+			"error":   "Failed to check subcategories",
+			"details": err.Error(),
+		})
+	}
+
+	if subcategoryCount > 0 {
+		return c.Status(400).JSON(fiber.Map{
+			"error": fmt.Sprintf("Cannot delete category: %d subcategories exist. Please delete or reassign them first.", subcategoryCount),
 		})
 	}
 
@@ -1087,14 +1120,86 @@ func adminGetOrdersHandler(c *fiber.Ctx) error {
 	orders, err := getAllOrders()
 	if err != nil {
 		return c.Status(500).JSON(fiber.Map{
-			"error":   "Failed to get orders",
+			"error":   "Failed to fetch orders",
 			"details": err.Error(),
 		})
 	}
 
 	return c.JSON(fiber.Map{
 		"orders": orders,
-		"total":  len(orders),
+	})
+}
+
+// Admin: Get single order with full details
+func adminGetOrderHandler(c *fiber.Ctx) error {
+	orderID, err := strconv.Atoi(c.Params("id"))
+	if err != nil {
+		return c.Status(400).JSON(fiber.Map{
+			"error": "Invalid order ID",
+		})
+	}
+
+	order, err := getOrderByID(orderID)
+	if err != nil {
+		return c.Status(404).JSON(fiber.Map{
+			"error": "Order not found",
+		})
+	}
+
+	return c.JSON(fiber.Map{
+		"order": order,
+	})
+}
+
+// Admin: Get customers
+func adminGetCustomersHandler(c *fiber.Ctx) error {
+	query := `
+		SELECT id, username, email, first_name, last_name, phone, role, created_at
+		FROM auth.users
+		WHERE role = 'customer'
+		ORDER BY created_at DESC
+	`
+
+	rows, err := db.Query(query)
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{
+			"error":   "Failed to fetch customers",
+			"details": err.Error(),
+		})
+	}
+	defer rows.Close()
+
+	type Customer struct {
+		ID        int     `json:"id"`
+		Username  string  `json:"username"`
+		Email     string  `json:"email"`
+		FirstName *string `json:"first_name,omitempty"`
+		LastName  *string `json:"last_name,omitempty"`
+		Phone     *string `json:"phone,omitempty"`
+		Role      string  `json:"role"`
+		CreatedAt string  `json:"created_at"`
+	}
+
+	var customers []Customer
+	for rows.Next() {
+		var customer Customer
+		err := rows.Scan(
+			&customer.ID, &customer.Username, &customer.Email,
+			&customer.FirstName, &customer.LastName, &customer.Phone,
+			&customer.Role, &customer.CreatedAt,
+		)
+		if err != nil {
+			return c.Status(500).JSON(fiber.Map{
+				"error":   "Failed to scan customer",
+				"details": err.Error(),
+			})
+		}
+		customers = append(customers, customer)
+	}
+
+	return c.JSON(fiber.Map{
+		"customers": customers,
+		"total":     len(customers),
 	})
 }
 

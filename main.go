@@ -68,7 +68,9 @@ func main() {
 	admin.Put("/images/:imageId", adminUpdateProductImageHandler)             // Update product image
 	admin.Delete("/images/:imageId", adminDeleteProductImageHandler)          // Delete product image
 	admin.Get("/orders", adminGetOrdersHandler)                               // Get all orders
+	admin.Get("/orders/:id", adminGetOrderHandler)                            // Get single order
 	admin.Put("/orders/:id/status", adminUpdateOrderStatusHandler)            // Update order status
+	admin.Get("/customers", adminGetCustomersHandler)                         // Get all customers
 
 	// Get port from environment variable (Cloud Run sets this)
 	port := os.Getenv("PORT")

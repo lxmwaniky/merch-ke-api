@@ -272,7 +272,7 @@ func updateCategory(id int, req *UpdateCategoryRequest) (*Category, error) {
 
 // Delete category (admin only) - soft delete
 func deleteCategory(id int) error {
-	query := `UPDATE catalog.categories SET is_active = false, updated_at = NOW() WHERE id = $1`
+	query := `DELETE FROM catalog.categories WHERE id = $1`
 	_, err := db.Exec(query, id)
 	return err
 }
