@@ -1,6 +1,7 @@
 package main
 
 import (
+	"database/sql"
 	"fmt"
 	"log"
 	"strings"
@@ -17,6 +18,7 @@ type Product struct {
 	CategoryID       int       `json:"category_id"`
 	BasePrice        float64   `json:"base_price"`
 	SKUPrefix        string    `json:"sku_prefix"`
+	ImageURL         string    `json:"image_url,omitempty"`
 	IsActive         bool      `json:"is_active"`
 	IsFeatured       bool      `json:"is_featured"`
 	Weight           float64   `json:"weight"`
@@ -61,6 +63,7 @@ type CreateProductRequest struct {
 	CategoryID       int                   `json:"category_id"`
 	BasePrice        float64               `json:"base_price"`
 	SKUPrefix        string                `json:"sku_prefix"`
+	ImageURL         string                `json:"image_url,omitempty"`
 	IsFeatured       bool                  `json:"is_featured"`
 	Weight           float64               `json:"weight"`
 	Dimensions       string                `json:"dimensions"`
@@ -84,8 +87,9 @@ type Category struct {
 // Get all products from database
 func getProductsFromDB() ([]Product, error) {
 	query := `
-		SELECT id, name, slug, description, category_id, base_price, is_active, is_featured 
-		FROM catalog.products 
+		SELECT p.id, p.name, p.slug, p.description, p.category_id, p.base_price, p.is_active, p.is_featured,
+		       COALESCE((SELECT image_url FROM catalog.product_images WHERE product_id = p.id ORDER BY is_primary DESC, display_order LIMIT 1), '') as image_url
+		FROM catalog.products p
 		WHERE is_active = true 
 		ORDER BY created_at DESC
 	`
@@ -99,7 +103,7 @@ func getProductsFromDB() ([]Product, error) {
 	var products []Product
 	for rows.Next() {
 		var p Product
-		err := rows.Scan(&p.ID, &p.Name, &p.Slug, &p.Description, &p.CategoryID, &p.BasePrice, &p.IsActive, &p.IsFeatured)
+		err := rows.Scan(&p.ID, &p.Name, &p.Slug, &p.Description, &p.CategoryID, &p.BasePrice, &p.IsActive, &p.IsFeatured, &p.ImageURL)
 		if err != nil {
 			return nil, err
 		}
@@ -369,6 +373,7 @@ type UpdateProductRequest struct {
 	IsActive         *bool    `json:"is_active,omitempty"`
 	Weight           *float64 `json:"weight,omitempty"`
 	Dimensions       *string  `json:"dimensions,omitempty"`
+	ImageURL         *string  `json:"image_url,omitempty"`
 }
 
 // Create new product (admin only)
@@ -470,12 +475,59 @@ func updateProduct(id int, req *UpdateProductRequest) (*Product, error) {
 		return nil, err
 	}
 
+	// Handle image_url update if provided
+	if req.ImageURL != nil && *req.ImageURL != "" {
+		// Check if product already has an image
+		var existingImageID int
+		checkQuery := `SELECT id FROM catalog.product_images WHERE product_id = $1 AND is_primary = true LIMIT 1`
+		err := db.QueryRow(checkQuery, id).Scan(&existingImageID)
+		
+		if err == sql.ErrNoRows {
+			// No existing image, create new one
+			insertQuery := `
+				INSERT INTO catalog.product_images (product_id, image_url, is_primary, display_order)
+				VALUES ($1, $2, true, 0)
+			`
+			_, err = db.Exec(insertQuery, id, *req.ImageURL)
+			if err != nil {
+				// Log error but don't fail the whole update
+				fmt.Printf("Warning: Failed to insert product image: %v\n", err)
+			}
+		} else if err == nil {
+			// Update existing image
+			updateQuery := `UPDATE catalog.product_images SET image_url = $1, updated_at = NOW() WHERE id = $2`
+			_, err = db.Exec(updateQuery, *req.ImageURL, existingImageID)
+			if err != nil {
+				// Log error but don't fail the whole update
+				fmt.Printf("Warning: Failed to update product image: %v\n", err)
+			}
+		}
+	}
+
 	return &product, nil
 }
 
-// Soft delete product (admin only)
+// Hard delete product (admin only) - with validation
 func deleteProduct(id int) error {
-	query := `UPDATE catalog.products SET is_active = false, updated_at = NOW() WHERE id = $1`
+	// First, check if product has any variants that were used in orders
+	var orderCount int
+	checkQuery := `
+		SELECT COUNT(DISTINCT oi.order_id)
+		FROM orders.order_items oi
+		JOIN catalog.product_variants pv ON oi.variant_id = pv.id
+		WHERE pv.product_id = $1
+	`
+	err := db.QueryRow(checkQuery, id).Scan(&orderCount)
+	if err != nil {
+		return fmt.Errorf("failed to check product orders: %v", err)
+	}
+
+	if orderCount > 0 {
+		return fmt.Errorf("cannot delete product: it has been used in %d order(s). Consider marking it as inactive instead", orderCount)
+	}
+
+	// If no orders, proceed with hard delete (CASCADE will handle variants and images)
+	query := `DELETE FROM catalog.products WHERE id = $1`
 
 	result, err := db.Exec(query, id)
 	if err != nil {

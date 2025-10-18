@@ -279,11 +279,34 @@ func adminCreateProductHandler(c *fiber.Ctx) error {
 
 	// Create images if provided
 	var createdImages []ProductImage
+	
+	// If image_url is provided in the main request, create a default image
+	if req.ImageURL != "" {
+		imageReq := ProductImageRequest{
+			ImageURL:     req.ImageURL,
+			AltText:      req.Name,
+			DisplayOrder: 1,
+			IsPrimary:    true,
+		}
+		image, err := createProductImage(product.ID, nil, &imageReq)
+		if err != nil {
+			log.Printf("Failed to create primary image for product %d: %v", product.ID, err)
+		} else {
+			createdImages = append(createdImages, *image)
+		}
+	}
+	
+	// Create additional images if provided in images array
 	if len(req.Images) > 0 {
-		for _, imageReq := range req.Images {
+		for i, imageReq := range req.Images {
 			// Validate each image request
 			if imageReq.ImageURL == "" {
 				continue // Skip invalid images
+			}
+			
+			// Set display order if not set
+			if imageReq.DisplayOrder == 0 {
+				imageReq.DisplayOrder = i + 2 // Start from 2 since primary is 1
 			}
 
 			image, err := createProductImage(product.ID, nil, &imageReq)
@@ -393,9 +416,11 @@ func adminDeleteProductHandler(c *fiber.Ctx) error {
 // Admin: Get all products (including inactive)
 func adminGetProductsHandler(c *fiber.Ctx) error {
 	query := `
-		SELECT id, name, slug, description, category_id, base_price, is_active, is_featured 
-		FROM catalog.products 
-		ORDER BY created_at DESC
+		SELECT p.id, p.name, p.slug, p.description, p.short_description, p.category_id, p.base_price, 
+		       p.is_active, p.is_featured, p.created_at, p.updated_at,
+		       COALESCE((SELECT image_url FROM catalog.product_images WHERE product_id = p.id ORDER BY is_primary DESC, display_order LIMIT 1), '') as image_url
+		FROM catalog.products p
+		ORDER BY p.created_at DESC
 	`
 
 	rows, err := db.Query(query)
@@ -410,10 +435,14 @@ func adminGetProductsHandler(c *fiber.Ctx) error {
 	var products []Product
 	for rows.Next() {
 		var p Product
-		err := rows.Scan(&p.ID, &p.Name, &p.Slug, &p.Description, &p.CategoryID, &p.BasePrice, &p.IsActive, &p.IsFeatured)
+		err := rows.Scan(
+			&p.ID, &p.Name, &p.Slug, &p.Description, &p.ShortDescription, 
+			&p.CategoryID, &p.BasePrice, &p.IsActive, &p.IsFeatured,
+			&p.CreatedAt, &p.UpdatedAt, &p.ImageURL,
+		)
 		if err != nil {
 			return c.Status(500).JSON(fiber.Map{
-				"error":   "Failed to scan products",
+				"error":   "Failed to scan product",
 				"details": err.Error(),
 			})
 		}
@@ -423,7 +452,6 @@ func adminGetProductsHandler(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{
 		"products": products,
 		"total":    len(products),
-		"message":  "All products (including inactive)",
 	})
 }
 
