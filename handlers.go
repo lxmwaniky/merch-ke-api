@@ -1414,5 +1414,3 @@ func validateCartInput(c *fiber.Ctx) error {
 
 	return c.Next()
 }
-
-
