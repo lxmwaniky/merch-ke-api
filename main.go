@@ -53,6 +53,11 @@ func main() {
 	app.Get("/api/orders/:id", optionalAuthMiddleware, getOrderHandler) // Get specific order
 	app.Get("/api/orders", authMiddleware, getUserOrdersHandler)        // Get user's orders
 
+	// Wallet routes (authenticated users only)
+	app.Get("/api/wallet/balance", authMiddleware, getWalletBalanceHandler)
+	app.Get("/api/wallet/transactions", authMiddleware, getWalletTransactionsHandler)
+	app.Post("/api/wallet/add-tokens", authMiddleware, addTokensHandler) // For demo: add tokens
+
 	// Admin routes (require admin privileges)
 	admin := app.Group("/api/admin", authMiddleware, adminMiddleware)
 	admin.Post("/products", adminCreateProductHandler)

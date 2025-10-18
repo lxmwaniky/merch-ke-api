@@ -90,6 +90,7 @@ CREATE TABLE auth.users (
     role VARCHAR(20) DEFAULT 'customer',
     is_active BOOLEAN DEFAULT true,
     email_verified BOOLEAN DEFAULT false,
+    wallet_balance DECIMAL(10,2) DEFAULT 1000.00,
     last_login TIMESTAMP,
     created_at TIMESTAMP DEFAULT NOW(),
     updated_at TIMESTAMP DEFAULT NOW()
@@ -247,6 +248,24 @@ CREATE INDEX idx_orders_guest_cart_session ON orders.guest_cart_items(session_id
 
 -- Partial index for active products
 CREATE INDEX idx_catalog_products_active_slug ON catalog.products (slug) WHERE is_active;
+
+-- =====================================================
+-- WALLET SYSTEM - Token-based payment simulation
+-- =====================================================
+
+CREATE TABLE auth.wallet_transactions (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER REFERENCES auth.users(id) ON DELETE CASCADE,
+    order_id INTEGER REFERENCES orders.orders(id),
+    amount DECIMAL(10,2) NOT NULL,
+    type VARCHAR(20) NOT NULL, -- 'credit' or 'debit'
+    description TEXT,
+    balance_after DECIMAL(10,2) NOT NULL,
+    created_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE INDEX idx_wallet_user ON auth.wallet_transactions(user_id);
+CREATE INDEX idx_wallet_order ON auth.wallet_transactions(order_id);
 
 -- =====================================================
 -- ADD FOREIGN KEY CONSTRAINTS AFTER TABLE CREATION

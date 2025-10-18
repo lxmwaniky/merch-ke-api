@@ -1262,6 +1262,76 @@ func adminUpdateOrderStatusHandler(c *fiber.Ctx) error {
 }
 
 // =====================================================
+// WALLET HANDLERS
+// =====================================================
+
+func getWalletBalanceHandler(c *fiber.Ctx) error {
+	userID := c.Locals("userID").(int)
+
+	balance, err := getWalletBalance(userID)
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{
+			"error": "Failed to get wallet balance",
+		})
+	}
+
+	return c.JSON(fiber.Map{
+		"balance": balance,
+	})
+}
+
+func getWalletTransactionsHandler(c *fiber.Ctx) error {
+	userID := c.Locals("userID").(int)
+	limit := c.QueryInt("limit", 50)
+
+	transactions, err := getWalletTransactions(userID, limit)
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{
+			"error": "Failed to get transactions",
+		})
+	}
+
+	return c.JSON(fiber.Map{
+		"transactions": transactions,
+	})
+}
+
+// For demo purposes - add tokens to wallet
+func addTokensHandler(c *fiber.Ctx) error {
+	userID := c.Locals("userID").(int)
+
+	var req struct {
+		Amount float64 `json:"amount"`
+	}
+
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(400).JSON(fiber.Map{
+			"error": "Invalid request",
+		})
+	}
+
+	if req.Amount <= 0 || req.Amount > 10000 {
+		return c.Status(400).JSON(fiber.Map{
+			"error": "Amount must be between 1 and 10000",
+		})
+	}
+
+	err := addWalletTransaction(userID, req.Amount, "credit", "Demo tokens added", nil)
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{
+			"error": "Failed to add tokens",
+		})
+	}
+
+	newBalance, _ := getWalletBalance(userID)
+
+	return c.JSON(fiber.Map{
+		"message": "Tokens added successfully",
+		"balance": newBalance,
+	})
+}
+
+// =====================================================
 // VALIDATION MIDDLEWARE
 // =====================================================
 

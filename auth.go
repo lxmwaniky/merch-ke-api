@@ -22,7 +22,20 @@ type User struct {
 	Role          string    `json:"role"`
 	IsActive      bool      `json:"is_active"`
 	EmailVerified bool      `json:"email_verified"`
+	WalletBalance float64   `json:"wallet_balance"`
 	CreatedAt     time.Time `json:"created_at"`
+}
+
+// WalletTransaction for tracking token movements
+type WalletTransaction struct {
+	ID           int       `json:"id"`
+	UserID       int       `json:"user_id"`
+	OrderID      *int      `json:"order_id,omitempty"`
+	Amount       float64   `json:"amount"`
+	Type         string    `json:"type"` // "credit" or "debit"
+	Description  string    `json:"description"`
+	BalanceAfter float64   `json:"balance_after"`
+	CreatedAt    time.Time `json:"created_at"`
 }
 
 // Registration request struct
@@ -117,7 +130,7 @@ func createUser(req *RegisterRequest) (*User, error) {
 // Get user by email for login
 func getUserByEmail(email string) (*User, error) {
 	query := `
-		SELECT id, username, email, password_hash, first_name, last_name, phone, role, is_active, email_verified, created_at
+		SELECT id, username, email, password_hash, first_name, last_name, phone, role, is_active, email_verified, wallet_balance, created_at
 		FROM auth.users 
 		WHERE email = $1 AND is_active = true
 	`
@@ -126,7 +139,7 @@ func getUserByEmail(email string) (*User, error) {
 	err := db.QueryRow(query, email).Scan(
 		&user.ID, &user.Username, &user.Email, &user.PasswordHash,
 		&user.FirstName, &user.LastName, &user.Phone, &user.Role,
-		&user.IsActive, &user.EmailVerified, &user.CreatedAt,
+		&user.IsActive, &user.EmailVerified, &user.WalletBalance, &user.CreatedAt,
 	)
 
 	if err != nil {
@@ -142,7 +155,7 @@ func getUserByEmail(email string) (*User, error) {
 // Get user by ID
 func getUserByID(userID int) (*User, error) {
 	query := `
-		SELECT id, username, email, first_name, last_name, phone, role, is_active, email_verified, created_at
+		SELECT id, username, email, first_name, last_name, phone, role, is_active, email_verified, wallet_balance, created_at
 		FROM auth.users 
 		WHERE id = $1 AND is_active = true
 	`
@@ -151,7 +164,7 @@ func getUserByID(userID int) (*User, error) {
 	err := db.QueryRow(query, userID).Scan(
 		&user.ID, &user.Username, &user.Email,
 		&user.FirstName, &user.LastName, &user.Phone, &user.Role,
-		&user.IsActive, &user.EmailVerified, &user.CreatedAt,
+		&user.IsActive, &user.EmailVerified, &user.WalletBalance, &user.CreatedAt,
 	)
 
 	if err != nil {
@@ -162,4 +175,85 @@ func getUserByID(userID int) (*User, error) {
 	}
 
 	return &user, nil
+}
+
+// Get wallet balance
+func getWalletBalance(userID int) (float64, error) {
+	var balance float64
+	query := `SELECT wallet_balance FROM auth.users WHERE id = $1`
+	err := db.QueryRow(query, userID).Scan(&balance)
+	return balance, err
+}
+
+// Add wallet transaction and update balance
+func addWalletTransaction(userID int, amount float64, transactionType, description string, orderID *int) error {
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	// Get current balance
+	var currentBalance float64
+	err = tx.QueryRow(`SELECT wallet_balance FROM auth.users WHERE id = $1 FOR UPDATE`, userID).Scan(&currentBalance)
+	if err != nil {
+		return err
+	}
+
+	// Calculate new balance
+	newBalance := currentBalance
+	if transactionType == "credit" {
+		newBalance += amount
+	} else {
+		newBalance -= amount
+		if newBalance < 0 {
+			return errors.New("insufficient wallet balance")
+		}
+	}
+
+	// Update user balance
+	_, err = tx.Exec(`UPDATE auth.users SET wallet_balance = $1 WHERE id = $2`, newBalance, userID)
+	if err != nil {
+		return err
+	}
+
+	// Insert transaction record
+	_, err = tx.Exec(`
+		INSERT INTO auth.wallet_transactions (user_id, order_id, amount, type, description, balance_after)
+		VALUES ($1, $2, $3, $4, $5, $6)
+	`, userID, orderID, amount, transactionType, description, newBalance)
+	if err != nil {
+		return err
+	}
+
+	return tx.Commit()
+}
+
+// Get wallet transactions
+func getWalletTransactions(userID int, limit int) ([]WalletTransaction, error) {
+	query := `
+		SELECT id, user_id, order_id, amount, type, description, balance_after, created_at
+		FROM auth.wallet_transactions
+		WHERE user_id = $1
+		ORDER BY created_at DESC
+		LIMIT $2
+	`
+
+	rows, err := db.Query(query, userID, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var transactions []WalletTransaction
+	for rows.Next() {
+		var t WalletTransaction
+		err := rows.Scan(&t.ID, &t.UserID, &t.OrderID, &t.Amount, &t.Type, &t.Description, &t.BalanceAfter, &t.CreatedAt)
+		if err != nil {
+			return nil, err
+		}
+		transactions = append(transactions, t)
+	}
+
+	return transactions, nil
 }
